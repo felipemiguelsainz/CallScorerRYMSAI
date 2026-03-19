@@ -1,0 +1,225 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String       @id @default(uuid())
+  username    String?      @unique
+  email       String       @unique
+  password    String
+  name        String
+  role        Role         @default(AUDITOR)
+  authProvider AuthProvider @default(LOCAL)
+  externalAuthId String?    @unique
+  isActive    Boolean      @default(true)
+  lastLoginAt DateTime?
+  gestorId    String?
+  gestor      Gestor?      @relation(fields: [gestorId], references: [id], onDelete: SetNull)
+  // Future Azure AD integration:
+  // azure_oid String?     @unique // Object ID from Azure AD
+  evaluations Evaluation[] @relation("AuditorEvaluations")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([email])
+  @@index([username])
+  @@index([role])
+  @@index([isActive])
+  @@index([authProvider])
+  @@map("users")
+}
+
+model Gestor {
+  id          String       @id @default(uuid())
+  name        String       @db.VarChar(150)
+  legajo      String?      @unique
+  users       User[]
+  evaluations Evaluation[]
+  createdAt   DateTime     @default(now())
+  deletedAt   DateTime?
+
+  @@index([name])
+  @@index([deletedAt])
+  @@map("gestores")
+}
+
+model Evaluation {
+  id                String   @id @default(uuid())
+
+  // ─── CALL IDENTIFICATION ──────────────────────────────────
+  call_id           String         @unique @db.VarChar(100)
+  account_number    String         @db.VarChar(50)
+  assignment_number String         @db.VarChar(50)
+  contact_type      ContactType
+  assignment_date   DateTime
+  capture_date      DateTime       @default(now())
+
+  // ─── GESTOR & AUDITOR ─────────────────────────────────────
+  gestor            Gestor         @relation(fields: [gestorId], references: [id], onDelete: Restrict)
+  gestorId          String
+  auditor           User           @relation("AuditorEvaluations", fields: [auditorId], references: [id], onDelete: Restrict)
+  auditorId         String
+
+  // ─── AUDIO & TRANSCRIPT ───────────────────────────────────
+  audio_filename    String         @db.VarChar(255)
+  audio_path        String
+  audio_duration_s  Int?
+  transcript        String?        @db.Text
+  transcript_json   Json?
+
+  // ─── SCORING — ESCUCHA ACTIVA ─────────────────────────────
+  ea_preg_motivo_atraso    ScoreValue @default(NO_APLICA)
+  ea_sondea_capacidad_pago ScoreValue @default(NO_APLICA)
+  ea_utiliza_informacion   ScoreValue @default(NO_APLICA)
+
+  // ─── SCORING — RESOLUCIÓN ─────────────────────────────────
+  res_neg_sentido_urgencia  ScoreValue @default(NO_APLICA)
+  res_negociacion_total_rr  ScoreValue @default(NO_APLICA)
+  res_ofrece_herramienta    ScoreValue @default(NO_APLICA)
+
+  // ─── SCORING — PREVENCIÓN ─────────────────────────────────
+  prev_consecuencias_beneficios ScoreValue @default(NO_APLICA)
+
+  // ─── SCORING — ESTRUCTURA (CORE 50%) ──────────────────────
+  core_apertura   ScoreValue @default(NO_APLICA)
+  core_control    ScoreValue @default(NO_APLICA)
+  core_cierre     ScoreValue @default(NO_APLICA)
+
+  // ─── SCORING — HERRAMIENTAS ───────────────────────────────
+  herr_sigue_politicas   ScoreValue @default(NO_APLICA)
+  herr_explica_ofrecidas ScoreValue @default(NO_APLICA)
+  herr_ofrece_pex        ScoreValue @default(NO_APLICA)
+
+  // ─── SCORING — DOCUMENTACIÓN ──────────────────────────────
+  doc_codifica           ScoreValue @default(NO_APLICA)
+  doc_gestiones_ant      ScoreValue @default(NO_APLICA)
+  doc_act_demograficos   ScoreValue @default(NO_APLICA)
+
+  // ─── SCORING — COMPLIANCE / BASICS (35%) ──────────────────
+  bas_identificacion  ScoreValue @default(NO_APLICA)
+  bas_informacion     ScoreValue @default(NO_APLICA)
+  bas_respeto         ScoreValue @default(NO_APLICA)
+  bas_veracidad       ScoreValue @default(NO_APLICA)
+
+  // ─── FLAGS ────────────────────────────────────────────────
+  flag_llamada_cortada     Boolean @default(false)
+  flag_problema_calidad    Boolean @default(false)
+  flag_problema_sonido     Boolean @default(false)
+  flag_sistema_lento       Boolean @default(false)
+  flag_conectividad        Boolean @default(false)
+  flag_empatia_covid       Boolean @default(false)
+
+  // ─── CALCULATED SCORES ────────────────────────────────────
+  score_core    Decimal @default(0) @db.Decimal(5, 2)
+  score_basics  Decimal @default(0) @db.Decimal(5, 2)
+  score_total   Decimal @default(0) @db.Decimal(5, 2)
+  observaciones String? @db.Text
+
+  // ─── DEBTOR ANALYSIS ──────────────────────────────────────
+  debtor_analysis DebtorAnalysis?
+
+  // ─── STATUS ───────────────────────────────────────────────
+  status         EvaluationStatus @default(DRAFT)
+  processing_state ProcessingState @default(PENDING)
+  ai_scoring_raw Json?
+  deletedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([gestorId])
+  @@index([auditorId])
+  @@index([status])
+  @@index([capture_date])
+  @@index([score_total])
+  @@index([call_id])
+  @@index([gestorId, capture_date])
+  @@index([deletedAt])
+  @@map("evaluations")
+}
+
+model DebtorAnalysis {
+  id                    String   @id @default(uuid())
+  evaluation            Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  evaluationId          String     @unique
+
+  justificacion_tipo    DebtJustification
+  justificacion_detalle String    @db.Text
+  promesa_de_pago       Boolean   @default(false)
+  fecha_promesa         DateTime?
+  monto_prometido       Float?
+  nivel_conflicto       ConflictLevel
+  resumen_situacion     String    @db.Text
+  ai_raw_response       Json?
+
+  createdAt DateTime @default(now())
+
+  @@map("debtor_analyses")
+}
+
+// ─── ENUMS ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  GESTOR
+  AUDITOR
+  SUPERVISOR
+  ADMIN
+}
+
+enum AuthProvider {
+  LOCAL
+  ACTIVE_DIRECTORY
+  AZURE_AD
+}
+
+enum ContactType {
+  TITULAR
+  TERCERO
+  NO_CONTACTO
+}
+
+enum ScoreValue {
+  CUMPLE
+  NO_CUMPLE
+  NO_APLICA
+}
+
+enum EvaluationStatus {
+  DRAFT
+  COMPLETED
+  REVIEWED
+}
+
+enum ProcessingState {
+  PENDING
+  PROCESSING
+  READY
+  ERROR
+}
+
+enum DebtJustification {
+  NO_CONOCIA_DEUDA
+  SIN_DINERO
+  DISPUTA_MONTO
+  DESEMPLEO
+  PROBLEMA_SALUD
+  OLVIDO
+  ACUERDO_PREVIO
+  NIEGA_DEUDA
+  PROMESA_PAGO
+  OTRA
+}
+
+enum ConflictLevel {
+  BAJO
+  MEDIO
+  ALTO
+}
