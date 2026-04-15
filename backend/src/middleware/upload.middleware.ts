@@ -33,20 +33,24 @@ function fileFilter(_req: Request, file: Express.Multer.File, cb: multer.FileFil
 
 export async function assertMp3MimeType(filePath: string): Promise<void> {
   const handle = await fs.promises.open(filePath, 'r');
+  let header: Buffer;
   try {
-    const header = Buffer.alloc(10);
+    header = Buffer.alloc(4100);
     const { bytesRead } = await handle.read(header, 0, header.length, 0);
     if (bytesRead < 4) {
       throw Object.assign(new Error('El archivo no es un MP3 válido'), { status: 400 });
     }
-
-    const hasId3Header = header[0] === 0x49 && header[1] === 0x44 && header[2] === 0x33;
-    const hasFrameSync = header[0] === 0xff && (header[1] & 0xe0) === 0xe0;
-    if (!hasId3Header && !hasFrameSync) {
-      throw Object.assign(new Error('El archivo no es un MP3 válido'), { status: 400 });
-    }
+    header = header.subarray(0, bytesRead);
   } finally {
     await handle.close();
+  }
+
+  const { fileTypeFromBuffer } = await import('file-type');
+  const detectedType = await fileTypeFromBuffer(header);
+  const allowedMimeTypes = new Set(['audio/mpeg', 'audio/mp3']);
+
+  if (!detectedType || !allowedMimeTypes.has(detectedType.mime)) {
+    throw Object.assign(new Error('El archivo no es un MP3 válido'), { status: 400 });
   }
 
   const ext = path.extname(filePath).toLowerCase();

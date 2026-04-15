@@ -14,9 +14,12 @@ export default function TranscriptViewer({ evaluacionId, transcript }: Props) {
   const { mutate, isPending } = useUpdateEvaluacion(evaluacionId);
 
   function handleSave() {
-    mutate({ transcript: text }, {
-      onSuccess: () => setEditing(false),
-    });
+    mutate(
+      { transcript: text },
+      {
+        onSuccess: () => setEditing(false),
+      },
+    );
   }
 
   if (!transcript) {
@@ -33,7 +36,10 @@ export default function TranscriptViewer({ evaluacionId, transcript }: Props) {
         <h4 className="text-sm font-semibold text-brand-dark">Transcripción</h4>
         {!editing ? (
           <button
-            onClick={() => { setText(transcript); setEditing(true); }}
+            onClick={() => {
+              setText(transcript);
+              setEditing(true);
+            }}
             className="flex items-center gap-1 text-xs text-gray-500 hover:text-brand-red"
           >
             <Edit2 size={12} /> Editar
@@ -75,7 +81,10 @@ export default function TranscriptViewer({ evaluacionId, transcript }: Props) {
 
 function renderTranscriptLines(transcript: string) {
   const safe = DOMPurify.sanitize(transcript, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
-  const lines = safe.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = safe
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
 
   if (!lines.length) {
     return <p className="text-gray-500">Sin contenido.</p>;

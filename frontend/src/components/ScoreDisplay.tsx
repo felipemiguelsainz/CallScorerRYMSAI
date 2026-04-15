@@ -8,7 +8,11 @@ export default function ScoreDisplay({ score, label, size = 'sm' }: Props) {
   const normalizedScore = toScoreNumber(score);
 
   const color =
-    normalizedScore >= 80 ? 'text-green-600' : normalizedScore >= 60 ? 'text-orange-500' : 'text-red-600';
+    normalizedScore >= 80
+      ? 'text-green-600'
+      : normalizedScore >= 60
+        ? 'text-orange-500'
+        : 'text-red-600';
   const bg =
     normalizedScore >= 80
       ? 'bg-green-50 border-green-200'
@@ -25,9 +29,7 @@ export default function ScoreDisplay({ score, label, size = 'sm' }: Props) {
     );
   }
 
-  return (
-    <span className={`font-semibold ${color}`}>{normalizedScore.toFixed(1)}%</span>
-  );
+  return <span className={`font-semibold ${color}`}>{normalizedScore.toFixed(1)}%</span>;
 }
 
 function toScoreNumber(value: number | string | null | undefined): number {

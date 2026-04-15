@@ -1,0 +1,50 @@
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Temporary files with potential sensitive data
+tmp_cookies.txt
+*.tmp
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build outputs
+dist/
+build/
+.parcel-cache/
+
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Docker
+docker-compose.override.yml
+
+# Database
+*.db
+*.sqlite
+*.sql
+
+# Uploads (filesystem storage)
+uploads/
+secure-uploads/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Prisma
+prisma/seed.log

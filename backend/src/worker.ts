@@ -17,7 +17,8 @@ const worker = new Worker(
       data: { processing_state: 'PROCESSING' },
     });
 
-    const { transcript, transcript_json, duration_s } = await whisperService.transcribeAudio(filePath);
+    const { transcript, transcript_json, duration_s } =
+      await whisperService.transcribeAudio(filePath);
 
     await prisma.evaluation.update({
       where: { id: evaluationId },

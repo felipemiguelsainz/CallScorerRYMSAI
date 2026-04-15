@@ -25,7 +25,9 @@ export default class ErrorBoundary extends React.Component<Props, State> {
       return (
         <div className="min-h-screen flex items-center justify-center p-6 bg-brand-light">
           <div className="card max-w-md text-center">
-            <h1 className="text-lg font-bold text-brand-dark mb-2">Se produjo un error inesperado</h1>
+            <h1 className="text-lg font-bold text-brand-dark mb-2">
+              Se produjo un error inesperado
+            </h1>
             <p className="text-sm text-gray-600">Recargá la página para continuar.</p>
           </div>
         </div>

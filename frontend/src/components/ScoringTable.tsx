@@ -89,28 +89,34 @@ export default function ScoringTable({ evaluation }: Props) {
           </div>
           <table className="w-full text-sm">
             <tbody>
-              {section.items.map(({ label, field }) => (
-                <Fragment key={String(field)}>
-                  <tr className="border-b border-gray-100">
-                    <td className="px-4 py-2 text-gray-700">{label}</td>
-                    <td className="px-4 py-2 text-right">
-                      <ScoreBadge value={evaluation[field] as ScoreValue} />
-                    </td>
-                  </tr>
-                  {justifications[field] && (
-                    <tr className="border-b border-gray-100 last:border-0">
-                      <td colSpan={2} className="px-4 pb-3 pt-0">
-                        <details className="group">
-                          <summary className="cursor-pointer text-xs text-brand-red hover:underline">
-                            Ver justificación
-                          </summary>
-                          <JustificationText text={justifications[field] ?? ''} />
-                        </details>
+              {section.items.map(({ label, field }) => {
+                const scoreValue = evaluation[field] as ScoreValue;
+                const hasJustification = Boolean(justifications[field]);
+                const canShowJustification = hasJustification && scoreValue !== 'NO_CUMPLE';
+
+                return (
+                  <Fragment key={String(field)}>
+                    <tr className="border-b border-gray-100">
+                      <td className="px-4 py-2 text-gray-700">{label}</td>
+                      <td className="px-4 py-2 text-right">
+                        <ScoreBadge value={scoreValue} />
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              ))}
+                    {canShowJustification && (
+                      <tr className="border-b border-gray-100 last:border-0">
+                        <td colSpan={2} className="px-4 pb-3 pt-0">
+                          <details className="group">
+                            <summary className="cursor-pointer text-xs text-brand-red hover:underline">
+                              Ver justificación
+                            </summary>
+                            <JustificationText text={justifications[field] ?? ''} />
+                          </details>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -119,7 +125,9 @@ export default function ScoringTable({ evaluation }: Props) {
   );
 }
 
-function extractJustifications(raw: Evaluation['ai_scoring_raw']): Partial<Record<keyof Evaluation, string>> {
+function extractJustifications(
+  raw: Evaluation['ai_scoring_raw'],
+): Partial<Record<keyof Evaluation, string>> {
   if (!raw || typeof raw !== 'object') return {};
 
   const container = raw as { justifications?: unknown };

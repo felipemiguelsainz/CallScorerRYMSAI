@@ -42,6 +42,10 @@ export interface LoginResult {
   };
 }
 
+function getSessionVersion(payload: { sessionVersion?: number }): number {
+  return typeof payload.sessionVersion === 'number' ? payload.sessionVersion : 0;
+}
+
 export async function login(identifier: string, password: string): Promise<LoginResult> {
   const cleanIdentifier = identifier.trim();
   const user = await prisma.user.findFirst({
@@ -72,6 +76,7 @@ export async function login(identifier: string, password: string): Promise<Login
     email: user.email,
     role: user.role,
     gestorId: user.gestorId ?? undefined,
+    sessionVersion: user.tokenVersion,
   };
 
   const accessToken = signAccessToken(payload);
@@ -104,15 +109,27 @@ export async function rotateRefreshToken(refreshToken: string): Promise<LoginRes
     throw Object.assign(new Error('Usuario no encontrado'), { status: 401 });
   }
 
-  if (!user.isActive) {
-    throw Object.assign(new Error('Tu usuario está desactivado. Contacta al administrador.'), { status: 403 });
+  if (getSessionVersion(payload) !== user.tokenVersion) {
+    throw Object.assign(new Error('Refresh token inválido'), { status: 401 });
   }
 
+  if (!user.isActive) {
+    throw Object.assign(new Error('Tu usuario está desactivado. Contacta al administrador.'), {
+      status: 403,
+    });
+  }
+
+  const rotatedUser = await prisma.user.update({
+    where: { id: user.id },
+    data: { tokenVersion: { increment: 1 } },
+  });
+
   const cleanPayload = {
-    userId: user.id,
-    email: user.email,
-    role: user.role,
-    gestorId: user.gestorId ?? undefined,
+    userId: rotatedUser.id,
+    email: rotatedUser.email,
+    role: rotatedUser.role,
+    gestorId: rotatedUser.gestorId ?? undefined,
+    sessionVersion: rotatedUser.tokenVersion,
   };
 
   const newAccessToken = signAccessToken(cleanPayload);
@@ -123,15 +140,22 @@ export async function rotateRefreshToken(refreshToken: string): Promise<LoginRes
     refreshToken: newRefreshToken,
     user: {
       id: user.id,
-      username: user.username,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      isActive: user.isActive,
-      authProvider: user.authProvider,
-      externalAuthId: user.externalAuthId,
+      username: rotatedUser.username,
+      email: rotatedUser.email,
+      name: rotatedUser.name,
+      role: rotatedUser.role,
+      isActive: rotatedUser.isActive,
+      authProvider: rotatedUser.authProvider,
+      externalAuthId: rotatedUser.externalAuthId,
     },
   };
+}
+
+export async function revokeRefreshTokens(userId: string): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { tokenVersion: { increment: 1 } },
+  });
 }
 
 export async function getMe(userId: string) {

@@ -54,7 +54,9 @@ export default function NewEvaluation() {
       const createRes = await evaluacionesApi.create({ gestorId });
       const evaluationId = createRes.data.id;
 
-      await evaluacionesApi.uploadAudio(evaluationId, file, (progress) => setUploadProgress(progress));
+      await evaluacionesApi.uploadAudio(evaluationId, file, (progress) =>
+        setUploadProgress(progress),
+      );
       navigate(`/evaluaciones/${evaluationId}`);
     } catch {
       setError('No se pudo iniciar la evaluaci�n. Intenta nuevamente.');
@@ -79,11 +81,7 @@ export default function NewEvaluation() {
               placeholder="Buscar gestor..."
             />
           </div>
-          <select
-            value={gestorId}
-            onChange={(e) => setGestorId(e.target.value)}
-            className="input"
-          >
+          <select value={gestorId} onChange={(e) => setGestorId(e.target.value)} className="input">
             <option value="">Seleccionar gestor...</option>
             {filteredGestores.map((g: Gestor) => (
               <option key={g.id} value={g.id}>
@@ -94,11 +92,17 @@ export default function NewEvaluation() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Archivo de llamada *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Archivo de llamada *
+          </label>
           <div
             {...getRootProps()}
             className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
-              isDragActive ? 'border-blue-500 bg-blue-50' : file ? 'border-green-500 bg-green-50' : 'border-gray-300 bg-white'
+              isDragActive
+                ? 'border-blue-500 bg-blue-50'
+                : file
+                  ? 'border-green-500 bg-green-50'
+                  : 'border-gray-300 bg-white'
             }`}
           >
             <input {...getInputProps()} />
@@ -128,13 +132,18 @@ export default function NewEvaluation() {
               </div>
             )}
           </div>
-          {fileRejections.length > 0 && <p className="text-sm text-red-600 mt-2">Archivo rechazado: revisa formato y tama�o.</p>}
+          {fileRejections.length > 0 && (
+            <p className="text-sm text-red-600 mt-2">Archivo rechazado: revisa formato y tama�o.</p>
+          )}
         </div>
 
         {submitting && (
           <div>
             <div className="w-full bg-gray-200 rounded-full h-2">
-              <div className="bg-brand-red h-2 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+              <div
+                className="bg-brand-red h-2 rounded-full transition-all"
+                style={{ width: `${uploadProgress}%` }}
+              />
             </div>
             <p className="text-xs text-gray-600 mt-1">Subiendo... {uploadProgress}%</p>
           </div>
@@ -142,12 +151,7 @@ export default function NewEvaluation() {
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={submitting}
-          className="btn-primary"
-        >
+        <button type="button" onClick={handleSubmit} disabled={submitting} className="btn-primary">
           {submitting ? 'Iniciando...' : 'Iniciar Evaluacion'}
         </button>
       </div>

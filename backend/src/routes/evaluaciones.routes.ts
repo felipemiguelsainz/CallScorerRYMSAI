@@ -21,6 +21,8 @@ const router = Router();
 router.use(authMiddleware);
 router.use(filterByUserScope);
 
+// Evaluation lifecycle: create -> upload audio -> async transcription -> scoring -> debtor analysis.
+
 const uuidSchema = z.string().uuid('ID inválido');
 
 router.param('id', (req, res, next, value) => {
@@ -33,12 +35,26 @@ router.param('id', (req, res, next, value) => {
 });
 
 const SCORE_FIELD_KEYS = [
-  'ea_preg_motivo_atraso', 'ea_sondea_capacidad_pago', 'ea_utiliza_informacion',
-  'res_neg_sentido_urgencia', 'res_negociacion_total_rr', 'res_ofrece_herramienta',
-  'prev_consecuencias_beneficios', 'core_apertura', 'core_control', 'core_cierre',
-  'herr_sigue_politicas', 'herr_explica_ofrecidas', 'herr_ofrece_pex',
-  'doc_codifica', 'doc_gestiones_ant', 'doc_act_demograficos',
-  'bas_identificacion', 'bas_informacion', 'bas_respeto', 'bas_veracidad',
+  'ea_preg_motivo_atraso',
+  'ea_sondea_capacidad_pago',
+  'ea_utiliza_informacion',
+  'res_neg_sentido_urgencia',
+  'res_negociacion_total_rr',
+  'res_ofrece_herramienta',
+  'prev_consecuencias_beneficios',
+  'core_apertura',
+  'core_control',
+  'core_cierre',
+  'herr_sigue_politicas',
+  'herr_explica_ofrecidas',
+  'herr_ofrece_pex',
+  'doc_codifica',
+  'doc_gestiones_ant',
+  'doc_act_demograficos',
+  'bas_identificacion',
+  'bas_informacion',
+  'bas_respeto',
+  'bas_veracidad',
 ] as const;
 
 const createEvaluacionSchema = z.object({
@@ -108,7 +124,14 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     include: {
       gestor: { select: { id: true, name: true, legajo: true } },
       auditor: { select: { id: true, name: true, email: true } },
-      debtor_analysis: { select: { id: true, justificacion_tipo: true, promesa_de_pago: true, nivel_conflicto: true } },
+      debtor_analysis: {
+        select: {
+          id: true,
+          justificacion_tipo: true,
+          promesa_de_pago: true,
+          nivel_conflicto: true,
+        },
+      },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -124,40 +147,44 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   });
 });
 
-router.post('/', requireRole('AUDITOR', 'SUPERVISOR', 'ADMIN'), async (req: AuthRequest, res: Response) => {
-  const cleanBody = sanitizeObjectStrings(req.body);
-  const body = createEvaluacionSchema.parse(cleanBody);
+router.post(
+  '/',
+  requireRole('AUDITOR', 'SUPERVISOR', 'ADMIN'),
+  async (req: AuthRequest, res: Response) => {
+    const cleanBody = sanitizeObjectStrings(req.body);
+    const body = createEvaluacionSchema.parse(cleanBody);
 
-  const gestor = await prisma.gestor.findFirst({ where: { id: body.gestorId, deletedAt: null } });
-  if (!gestor) {
-    res.status(404).json({ error: 'Gestor no encontrado' });
-    return;
-  }
+    const gestor = await prisma.gestor.findFirst({ where: { id: body.gestorId, deletedAt: null } });
+    if (!gestor) {
+      res.status(404).json({ error: 'Gestor no encontrado' });
+      return;
+    }
 
-  const callId = body.call_id ?? `CALL-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-  const existing = await prisma.evaluation.findUnique({ where: { call_id: callId } });
-  if (existing) {
-    res.status(409).json({ error: 'call_id duplicado' });
-    return;
-  }
+    const callId = body.call_id ?? `CALL-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    const existing = await prisma.evaluation.findUnique({ where: { call_id: callId } });
+    if (existing) {
+      res.status(409).json({ error: 'call_id duplicado' });
+      return;
+    }
 
-  const evaluacion = await prisma.evaluation.create({
-    data: {
-      call_id: callId,
-      account_number: body.account_number ?? 'PENDING',
-      assignment_number: body.assignment_number ?? 'PENDING',
-      contact_type: body.contact_type ?? 'NO_CONTACTO',
-      assignment_date: body.assignment_date ? new Date(body.assignment_date) : new Date(),
-      gestorId: body.gestorId,
-      auditorId: req.user!.userId,
-      audio_filename: '',
-      audio_path: '',
-      processing_state: 'PENDING',
-    },
-  });
+    const evaluacion = await prisma.evaluation.create({
+      data: {
+        call_id: callId,
+        account_number: body.account_number ?? 'PENDING',
+        assignment_number: body.assignment_number ?? 'PENDING',
+        contact_type: body.contact_type ?? 'NO_CONTACTO',
+        assignment_date: body.assignment_date ? new Date(body.assignment_date) : new Date(),
+        gestorId: body.gestorId,
+        auditorId: req.user!.userId,
+        audio_filename: '',
+        audio_path: '',
+        processing_state: 'PENDING',
+      },
+    });
 
-  res.status(201).json(evaluacion);
-});
+    res.status(201).json(evaluacion);
+  },
+);
 
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   const evaluacion = await prisma.evaluation.findFirst({
@@ -199,50 +226,56 @@ router.get('/:id/status', async (req: AuthRequest, res: Response) => {
   res.json({ status });
 });
 
-router.put('/:id', requireRole('AUDITOR', 'SUPERVISOR', 'ADMIN'), async (req: AuthRequest, res: Response) => {
-  const cleanBody = sanitizeObjectStrings(req.body);
-  const body = updateEvaluacionSchema.parse(cleanBody);
+router.put(
+  '/:id',
+  requireRole('AUDITOR', 'SUPERVISOR', 'ADMIN'),
+  async (req: AuthRequest, res: Response) => {
+    const cleanBody = sanitizeObjectStrings(req.body);
+    const body = updateEvaluacionSchema.parse(cleanBody);
 
-  const existing = await prisma.evaluation.findFirst({
-    where: {
-      id: req.params.id,
-      deletedAt: null,
-      ...(req.scopeFilter ?? {}),
-    },
-  });
+    const existing = await prisma.evaluation.findFirst({
+      where: {
+        id: req.params.id,
+        deletedAt: null,
+        ...(req.scopeFilter ?? {}),
+      },
+    });
 
-  if (!existing) {
-    res.status(404).json({ error: 'Evaluaci�n no encontrada' });
-    return;
-  }
+    if (!existing) {
+      res.status(404).json({ error: 'Evaluaci�n no encontrada' });
+      return;
+    }
 
-  const updatedData: Record<string, unknown> = { ...body };
-  const mergedEval = { ...existing, ...body };
+    const updatedData: Record<string, unknown> = { ...body };
+    const mergedEval = { ...existing, ...body };
 
-  if (hasScoreFields(body)) {
-    const { score_core, score_basics, score_total } = scoringService.calculateScores(
-      mergedEval as Parameters<typeof scoringService.calculateScores>[0],
-    );
-    updatedData.score_core = score_core;
-    updatedData.score_basics = score_basics;
-    updatedData.score_total = score_total;
-  }
+    if (hasScoreFields(body)) {
+      const { score_core, score_basics, score_total } = scoringService.calculateScores(
+        mergedEval as Parameters<typeof scoringService.calculateScores>[0],
+      );
+      updatedData.score_core = score_core;
+      updatedData.score_basics = score_basics;
+      updatedData.score_total = score_total;
+    }
 
-  const evaluacion = await prisma.evaluation.update({
-    where: { id: req.params.id },
-    data: updatedData,
-    include: {
-      gestor: true,
-      auditor: { select: { id: true, name: true, email: true } },
-      debtor_analysis: true,
-    },
-  });
+    const evaluacion = await prisma.evaluation.update({
+      where: { id: req.params.id },
+      data: updatedData,
+      include: {
+        gestor: true,
+        auditor: { select: { id: true, name: true, email: true } },
+        debtor_analysis: true,
+      },
+    });
 
-  res.json(evaluacion);
-});
+    res.json(evaluacion);
+  },
+);
 
 router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
-  const existing = await prisma.evaluation.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  const existing = await prisma.evaluation.findFirst({
+    where: { id: req.params.id, deletedAt: null },
+  });
   if (!existing) {
     res.status(404).json({ error: 'Evaluaci�n no encontrada' });
     return;
@@ -252,220 +285,246 @@ router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res: Respon
   res.json({ message: 'Evaluaci�n eliminada l�gicamente' });
 });
 
-router.post('/:id/upload-audio', uploadAudioLimiter, upload.single('audio'), async (req: AuthRequest, res: Response) => {
-  if (!req.file) {
-    res.status(400).json({ error: 'No se recibi� archivo de audio' });
-    return;
-  }
+router.post(
+  '/:id/upload-audio',
+  uploadAudioLimiter,
+  upload.single('audio'),
+  async (req: AuthRequest, res: Response) => {
+    if (!req.file) {
+      res.status(400).json({ error: 'No se recibi� archivo de audio' });
+      return;
+    }
 
-  const existing = await prisma.evaluation.findFirst({
-    where: {
-      id: req.params.id,
-      deletedAt: null,
-      ...(req.scopeFilter ?? {}),
-    },
-  });
-
-  if (!existing) {
-    await fs.unlink(req.file.path).catch(() => undefined);
-    res.status(404).json({ error: 'Evaluaci�n no encontrada' });
-    return;
-  }
-
-  try {
-    await assertMp3MimeType(req.file.path);
-  } catch (error) {
-    await fs.unlink(req.file.path).catch(() => undefined);
-    throw error;
-  }
-
-  const storedPath = await storageProvider.upload(req.file.path, req.file.filename);
-
-  await prisma.evaluation.update({
-    where: { id: req.params.id },
-    data: {
-      audio_filename: req.file.filename,
-      audio_path: storedPath,
-      processing_state: 'PENDING',
-      transcript: null,
-      transcript_json: Prisma.JsonNull,
-    },
-  });
-
-  const queued = await enqueueAudioProcessingJob({
-    evaluationId: req.params.id,
-    filePath: storedPath,
-  });
-
-  if (!queued) {
-    res.status(202).json({
-      message: 'Audio recibido, pero la cola no est\u00e1 disponible. Reintente cuando Redis est\u00e9 activo.',
-      processing_state: 'PENDING',
+    const existing = await prisma.evaluation.findFirst({
+      where: {
+        id: req.params.id,
+        deletedAt: null,
+        ...(req.scopeFilter ?? {}),
+      },
     });
-    return;
-  }
 
-  res.status(202).json({ message: 'Audio recibido. Procesamiento en cola.', processing_state: 'PENDING' });
-});
+    if (!existing) {
+      await fs.unlink(req.file.path).catch(() => undefined);
+      res.status(404).json({ error: 'Evaluaci�n no encontrada' });
+      return;
+    }
+
+    try {
+      await assertMp3MimeType(req.file.path);
+    } catch (error) {
+      await fs.unlink(req.file.path).catch(() => undefined);
+      throw error;
+    }
+
+    const storedPath = await storageProvider.upload(req.file.path, req.file.filename);
+
+    // Marking as PENDING guarantees worker-driven processing is the source of truth.
+    await prisma.evaluation.update({
+      where: { id: req.params.id },
+      data: {
+        audio_filename: req.file.filename,
+        audio_path: storedPath,
+        processing_state: 'PENDING',
+        transcript: null,
+        transcript_json: Prisma.JsonNull,
+      },
+    });
+
+    const queued = await enqueueAudioProcessingJob({
+      evaluationId: req.params.id,
+      filePath: storedPath,
+    });
+
+    if (!queued) {
+      res.status(202).json({
+        message:
+          'Audio recibido, pero la cola no est\u00e1 disponible. Reintente cuando Redis est\u00e9 activo.',
+        processing_state: 'PENDING',
+      });
+      return;
+    }
+
+    res
+      .status(202)
+      .json({ message: 'Audio recibido. Procesamiento en cola.', processing_state: 'PENDING' });
+  },
+);
 
 router.post('/:id/transcribe', async (_req: AuthRequest, res: Response) => {
   res.status(400).json({ error: 'Endpoint deshabilitado: use upload-audio y status polling.' });
 });
 
-router.post('/:id/score', async (req: AuthRequest, res: Response) => {
-  const existing = await prisma.evaluation.findFirst({
-    where: { id: req.params.id, deletedAt: null, ...(req.scopeFilter ?? {}) },
-  });
-
-  if (!existing) {
-    res.status(404).json({ error: 'Evaluaci�n no encontrada' });
-    return;
-  }
-  if (!existing.transcript) {
-    res.status(400).json({ error: 'La evaluaci�n a�n no tiene transcripci�n lista.' });
-    return;
-  }
-
-  const audioSha256 = existing.audio_path ? await hashFileSha256(existing.audio_path) : null;
-  if (audioSha256) {
-    const reusableCandidates = await prisma.evaluation.findMany({
-      where: {
-        id: { not: req.params.id },
-        deletedAt: null,
-        ai_scoring_raw: {
-          path: ['audio_sha256'],
-          equals: audioSha256,
-        },
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: 20,
+router.post(
+  '/:id/score',
+  requireRole('AUDITOR', 'SUPERVISOR', 'ADMIN'),
+  async (req: AuthRequest, res: Response) => {
+    const existing = await prisma.evaluation.findFirst({
+      where: { id: req.params.id, deletedAt: null, ...(req.scopeFilter ?? {}) },
     });
 
-    const reusableEvaluation = reusableCandidates.find((candidate) => hasScoringPayload(candidate.ai_scoring_raw));
-
-    if (reusableEvaluation) {
-      const reusedRaw = {
-        ...(toJsonObject(reusableEvaluation.ai_scoring_raw) ?? {}),
-        audio_sha256: audioSha256,
-        reused_from_evaluation_id: reusableEvaluation.id,
-      };
-
-      const evaluacion = await prisma.evaluation.update({
-        where: { id: req.params.id },
-        data: {
-          ...pickScoreFields(reusableEvaluation),
-          score_core: reusableEvaluation.score_core,
-          score_basics: reusableEvaluation.score_basics,
-          score_total: reusableEvaluation.score_total,
-          ai_scoring_raw: JSON.parse(JSON.stringify(reusedRaw)) as Prisma.InputJsonValue,
-        },
-        include: {
-          gestor: true,
-          auditor: { select: { id: true, name: true, email: true } },
-          debtor_analysis: true,
-        },
-      });
-
-      res.json({ message: 'Scoring reutilizado por audio idéntico', evaluacion });
+    if (!existing) {
+      res.status(404).json({ error: 'Evaluaci�n no encontrada' });
       return;
     }
-  }
-
-  const { scores, raw } = await scoringService.scoreWithGPT(existing.transcript);
-  const { score_core, score_basics, score_total, breakdown } = scoringService.calculateScores(scores);
-  const normalizedTranscript = typeof raw.transcript_used_for_scoring === 'string'
-    ? raw.transcript_used_for_scoring
-    : null;
-  const persistedRaw = {
-    ...raw,
-    ...(audioSha256 ? { audio_sha256: audioSha256 } : {}),
-    calculation: {
-      formula: 'score_total = core * 0.50 + basics * 0.35 + other * 0.15; cada bloque se calcula sobre criterios aplicables (CUMPLE / (CUMPLE + NO_CUMPLE)).',
-      breakdown,
-    },
-  };
-  const persistedRawJson = JSON.parse(JSON.stringify(persistedRaw)) as Prisma.InputJsonValue;
-
-  const evaluacion = await prisma.evaluation.update({
-    where: { id: req.params.id },
-    data: {
-      ...scores,
-      score_core,
-      score_basics,
-      score_total,
-      ai_scoring_raw: persistedRawJson,
-      ...(normalizedTranscript ? { transcript: normalizedTranscript } : {}),
-    },
-    include: {
-      gestor: true,
-      auditor: { select: { id: true, name: true, email: true } },
-      debtor_analysis: true,
-    },
-  });
-
-  res.json({ message: 'Scoring completado', evaluacion });
-});
-
-router.post('/:id/analyze-debtor', async (req: AuthRequest, res: Response) => {
-  const existing = await prisma.evaluation.findFirst({
-    where: { id: req.params.id, deletedAt: null, ...(req.scopeFilter ?? {}) },
-    include: { debtor_analysis: true },
-  });
-
-  if (!existing) {
-    res.status(404).json({ error: 'Evaluaci�n no encontrada' });
-    return;
-  }
-
-  if (!existing.transcript) {
-    res.status(400).json({ error: 'La evaluaci�n no tiene transcripci�n.' });
-    return;
-  }
-
-  const { analysis, raw } = await debtorService.analyzeDebtor(existing.transcript);
-
-  const evaluacion = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    if (existing.debtor_analysis) {
-      await tx.debtorAnalysis.update({
-        where: { evaluationId: req.params.id },
-        data: { ...analysis, ai_raw_response: raw },
-      });
-    } else {
-      await tx.debtorAnalysis.create({
-        data: { evaluationId: req.params.id, ...analysis, ai_raw_response: raw },
-      });
+    if (!existing.transcript) {
+      res.status(400).json({ error: 'La evaluaci�n a�n no tiene transcripci�n lista.' });
+      return;
     }
 
-    return tx.evaluation.findUnique({
+    // Same audio => same score. Reuse reduces AI cost and keeps consistency across duplicates.
+    const audioSha256 = existing.audio_path ? await hashFileSha256(existing.audio_path) : null;
+    if (audioSha256) {
+      const reusableCandidates = await prisma.evaluation.findMany({
+        where: {
+          id: { not: req.params.id },
+          deletedAt: null,
+          ai_scoring_raw: {
+            path: ['audio_sha256'],
+            equals: audioSha256,
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 20,
+      });
+
+      const reusableEvaluation = reusableCandidates.find((candidate) =>
+        hasScoringPayload(candidate.ai_scoring_raw),
+      );
+
+      if (reusableEvaluation) {
+        const reusedRaw = {
+          ...(toJsonObject(reusableEvaluation.ai_scoring_raw) ?? {}),
+          audio_sha256: audioSha256,
+          reused_from_evaluation_id: reusableEvaluation.id,
+        };
+
+        const evaluacion = await prisma.evaluation.update({
+          where: { id: req.params.id },
+          data: {
+            ...pickScoreFields(reusableEvaluation),
+            score_core: reusableEvaluation.score_core,
+            score_basics: reusableEvaluation.score_basics,
+            score_total: reusableEvaluation.score_total,
+            ai_scoring_raw: JSON.parse(JSON.stringify(reusedRaw)) as Prisma.InputJsonValue,
+          },
+          include: {
+            gestor: true,
+            auditor: { select: { id: true, name: true, email: true } },
+            debtor_analysis: true,
+          },
+        });
+
+        res.json({ message: 'Scoring reutilizado por audio idéntico', evaluacion });
+        return;
+      }
+    }
+
+    const { scores, raw } = await scoringService.scoreWithGPT(existing.transcript);
+    const { score_core, score_basics, score_total, breakdown } =
+      scoringService.calculateScores(scores);
+    const normalizedTranscript =
+      typeof raw.transcript_used_for_scoring === 'string' ? raw.transcript_used_for_scoring : null;
+    const persistedRaw = {
+      ...raw,
+      ...(audioSha256 ? { audio_sha256: audioSha256 } : {}),
+      calculation: {
+        formula:
+          'score_total = core * 0.50 + basics * 0.35 + other * 0.15; cada bloque se calcula sobre criterios aplicables (CUMPLE / (CUMPLE + NO_CUMPLE)).',
+        breakdown,
+      },
+    };
+    const persistedRawJson = JSON.parse(JSON.stringify(persistedRaw)) as Prisma.InputJsonValue;
+
+    const evaluacion = await prisma.evaluation.update({
       where: { id: req.params.id },
+      data: {
+        ...scores,
+        score_core,
+        score_basics,
+        score_total,
+        ai_scoring_raw: persistedRawJson,
+        ...(normalizedTranscript ? { transcript: normalizedTranscript } : {}),
+      },
       include: {
         gestor: true,
         auditor: { select: { id: true, name: true, email: true } },
         debtor_analysis: true,
       },
     });
-  });
 
-  res.json({ message: 'An�lisis del deudor completado', evaluacion });
-});
+    res.json({ message: 'Scoring completado', evaluacion });
+  },
+);
 
-router.post('/:id/complete', async (req: AuthRequest, res: Response) => {
-  const existing = await prisma.evaluation.findFirst({
-    where: { id: req.params.id, deletedAt: null, ...(req.scopeFilter ?? {}) },
-  });
+router.post(
+  '/:id/analyze-debtor',
+  requireRole('AUDITOR', 'SUPERVISOR', 'ADMIN'),
+  async (req: AuthRequest, res: Response) => {
+    const existing = await prisma.evaluation.findFirst({
+      where: { id: req.params.id, deletedAt: null, ...(req.scopeFilter ?? {}) },
+      include: { debtor_analysis: true },
+    });
 
-  if (!existing) {
-    res.status(404).json({ error: 'Evaluaci�n no encontrada' });
-    return;
-  }
+    if (!existing) {
+      res.status(404).json({ error: 'Evaluaci�n no encontrada' });
+      return;
+    }
 
-  const evaluacion = await prisma.evaluation.update({
-    where: { id: req.params.id },
-    data: { status: 'COMPLETED' },
-  });
+    if (!existing.transcript) {
+      res.status(400).json({ error: 'La evaluaci�n no tiene transcripci�n.' });
+      return;
+    }
 
-  res.json({ message: 'Evaluaci�n completada', evaluacion });
-});
+    const { analysis, raw } = await debtorService.analyzeDebtor(existing.transcript);
+
+    // Upsert debtor analysis atomically to avoid partial writes between tables.
+    const evaluacion = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      if (existing.debtor_analysis) {
+        await tx.debtorAnalysis.update({
+          where: { evaluationId: req.params.id },
+          data: { ...analysis, ai_raw_response: raw },
+        });
+      } else {
+        await tx.debtorAnalysis.create({
+          data: { evaluationId: req.params.id, ...analysis, ai_raw_response: raw },
+        });
+      }
+
+      return tx.evaluation.findUnique({
+        where: { id: req.params.id },
+        include: {
+          gestor: true,
+          auditor: { select: { id: true, name: true, email: true } },
+          debtor_analysis: true,
+        },
+      });
+    });
+
+    res.json({ message: 'An�lisis del deudor completado', evaluacion });
+  },
+);
+
+router.post(
+  '/:id/complete',
+  requireRole('AUDITOR', 'SUPERVISOR', 'ADMIN'),
+  async (req: AuthRequest, res: Response) => {
+    const existing = await prisma.evaluation.findFirst({
+      where: { id: req.params.id, deletedAt: null, ...(req.scopeFilter ?? {}) },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'Evaluaci�n no encontrada' });
+      return;
+    }
+
+    const evaluacion = await prisma.evaluation.update({
+      where: { id: req.params.id },
+      data: { status: 'COMPLETED' },
+    });
+
+    res.json({ message: 'Evaluaci�n completada', evaluacion });
+  },
+);
 
 router.get('/:id/export-pdf', async (req: AuthRequest, res: Response) => {
   const evaluacion = await prisma.evaluation.findFirst({
@@ -483,7 +542,10 @@ router.get('/:id/export-pdf', async (req: AuthRequest, res: Response) => {
 
   const pdfBuffer = await pdfService.generateEvaluationPDF(evaluacion);
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="evaluacion-${evaluacion.call_id}.pdf"`);
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="evaluacion-${evaluacion.call_id}.pdf"`,
+  );
   res.send(pdfBuffer);
 });
 

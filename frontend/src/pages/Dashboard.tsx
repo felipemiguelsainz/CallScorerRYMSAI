@@ -5,7 +5,14 @@ import ScoreDisplay from '../components/ScoreDisplay';
 import { PlusCircle, TrendingUp, Users, ClipboardList } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
 } from 'recharts';
 
 export default function Dashboard() {
@@ -22,7 +29,7 @@ export default function Dashboard() {
     queryFn: () => dashboardApi.trends(30).then((r) => r.data),
   });
 
-  const { data: recientes } = useQuery({
+  const { data: recientes, isLoading: recientesLoading } = useQuery({
     queryKey: ['evaluaciones-recientes'],
     queryFn: () => evaluacionesApi.list({ limit: 5 }).then((r) => r.data),
   });
@@ -65,7 +72,13 @@ export default function Dashboard() {
           />
           <KpiCard
             label={isGestor ? 'Mejor Score' : 'Gestores Evaluados'}
-            value={isGestor ? <ScoreDisplay score={kpis.bestScore ?? 0} /> : (kpis.topGestores?.length ?? 0)}
+            value={
+              isGestor ? (
+                <ScoreDisplay score={kpis.bestScore ?? 0} />
+              ) : (
+                (kpis.topGestores?.length ?? 0)
+              )
+            }
             icon={<Users size={20} />}
           />
         </div>
@@ -80,7 +93,7 @@ export default function Dashboard() {
           </h3>
           {trendsLoading ? (
             <div className="h-48 bg-gray-100 animate-pulse rounded-lg" />
-          ) : (trends && trends.length > 0) ? (
+          ) : trends && trends.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={trends}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -88,9 +101,30 @@ export default function Dashboard() {
                 <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
                 <Tooltip formatter={(v: number | string) => `${Number(v).toFixed(1)}%`} />
                 <Legend />
-                <Line type="monotone" dataKey="avgTotal" name="Total" stroke="#CC0000" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="avgCore" name="Core" stroke="#2563eb" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="avgBasics" name="Basics" stroke="#16a34a" strokeWidth={2} dot={false} />
+                <Line
+                  type="monotone"
+                  dataKey="avgTotal"
+                  name="Total"
+                  stroke="#CC0000"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="avgCore"
+                  name="Core"
+                  stroke="#2563eb"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="avgBasics"
+                  name="Basics"
+                  stroke="#16a34a"
+                  strokeWidth={2}
+                  dot={false}
+                />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -119,9 +153,11 @@ export default function Dashboard() {
       </div>
 
       {/* Evaluaciones recientes */}
-      {recientes && recientes.data.length > 0 && (
-        <div className="card">
-          <h3 className="font-semibold text-brand-dark mb-4">Evaluaciones Recientes</h3>
+      <div className="card">
+        <h3 className="font-semibold text-brand-dark mb-4">Evaluaciones Recientes</h3>
+        {recientesLoading ? (
+          <div className="h-28 bg-gray-100 animate-pulse rounded-lg" />
+        ) : recientes && recientes.data.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -135,9 +171,15 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {recientes.data.map((ev) => (
-                  <tr key={ev.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                  <tr
+                    key={ev.id}
+                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                  >
                     <td className="py-2 pr-4">
-                      <Link to={`/evaluaciones/${ev.id}`} className="text-brand-red hover:underline font-medium">
+                      <Link
+                        to={`/evaluaciones/${ev.id}`}
+                        className="text-brand-red hover:underline font-medium"
+                      >
                         {ev.call_id}
                       </Link>
                     </td>
@@ -156,8 +198,10 @@ export default function Dashboard() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        ) : (
+          <p className="text-sm text-gray-400 text-center py-8">No hay evaluaciones recientes</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -196,7 +240,9 @@ function StatusBadge({ status }: { status: string }) {
     REVIEWED: 'Revisada',
   };
   return (
-    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${map[status] ?? 'bg-gray-100 text-gray-600'}`}>
+    <span
+      className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${map[status] ?? 'bg-gray-100 text-gray-600'}`}
+    >
       {labels[status] ?? status}
     </span>
   );

@@ -10,6 +10,7 @@ export interface AudioProcessJob {
 let audioProcessingQueue: Queue<AudioProcessJob, unknown, string> | null = null;
 
 function getQueue() {
+  // Lazily initialize queue so startup does not fail if Redis is temporarily unavailable.
   if (!audioProcessingQueue) {
     audioProcessingQueue = new Queue<AudioProcessJob, unknown, string>('audio-processing', {
       connection: { url: env.REDIS_URL },
@@ -36,7 +37,11 @@ export async function enqueueAudioProcessingJob(job: AudioProcessJob): Promise<b
     await getQueue().add('process-audio', job);
     return true;
   } catch (error) {
-    logger.warn({ err: error, evaluationId: job.evaluationId }, 'could not enqueue audio-processing job');
+    // Route handlers rely on this boolean to gracefully degrade to pending state.
+    logger.warn(
+      { err: error, evaluationId: job.evaluationId },
+      'could not enqueue audio-processing job',
+    );
     return false;
   }
 }

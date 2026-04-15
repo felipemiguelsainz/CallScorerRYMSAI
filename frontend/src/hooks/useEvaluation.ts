@@ -39,7 +39,8 @@ export function useUpdateEvaluacion(id: string) {
 export function useUploadAudio(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (file: File) => evaluacionesApi.uploadAudio(id, file),
+    mutationFn: ({ file, onProgress }: { file: File; onProgress?: (progress: number) => void }) =>
+      evaluacionesApi.uploadAudio(id, file, onProgress),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['evaluacion', id] }),
   });
 }

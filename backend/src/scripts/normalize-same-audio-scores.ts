@@ -69,9 +69,12 @@ async function main() {
   for (const [hash, group] of groups.entries()) {
     if (group.length < 2) continue;
 
-    const canonical = group.find((item) => hasScoringPayload(item.ai_scoring_raw) && Number(item.score_total) > 0)
-      ?? group.find((item) => hasScoringPayload(item.ai_scoring_raw))
-      ?? group[0];
+    const canonical =
+      group.find(
+        (item) => hasScoringPayload(item.ai_scoring_raw) && Number(item.score_total) > 0,
+      ) ??
+      group.find((item) => hasScoringPayload(item.ai_scoring_raw)) ??
+      group[0];
 
     const canonicalRaw = toJsonObject(canonical.ai_scoring_raw) ?? {};
 

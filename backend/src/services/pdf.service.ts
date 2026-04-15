@@ -35,10 +35,8 @@ export async function generateEvaluationPDF(eval_: EvaluationWithRelations): Pro
 
     // ── Header ─────────────────────────────────────────────────────────────────
     doc.rect(0, 0, doc.page.width, 80).fill(BRAND_RED);
-    doc.fillColor('white').fontSize(22).font('Helvetica-Bold')
-      .text('recuperos ✓ mandatos', 50, 25);
-    doc.fontSize(10).font('Helvetica')
-      .text('Evaluación de Llamada de Cobranza', 50, 52);
+    doc.fillColor('white').fontSize(22).font('Helvetica-Bold').text('recuperos ✓ mandatos', 50, 25);
+    doc.fontSize(10).font('Helvetica').text('Evaluación de Llamada de Cobranza', 50, 52);
 
     doc.moveDown(3);
 
@@ -60,7 +58,11 @@ export async function generateEvaluationPDF(eval_: EvaluationWithRelations): Pro
 
     doc.fontSize(10).font('Helvetica');
     for (const [label, value] of info) {
-      doc.fillColor(BRAND_DARK).text(`${label}: `, { continued: true }).font('Helvetica-Bold').text(String(value ?? ''));
+      doc
+        .fillColor(BRAND_DARK)
+        .text(`${label}: `, { continued: true })
+        .font('Helvetica-Bold')
+        .text(String(value ?? ''));
       doc.font('Helvetica');
     }
 
@@ -72,11 +74,17 @@ export async function generateEvaluationPDF(eval_: EvaluationWithRelations): Pro
     doc.moveDown(0.5);
 
     const totalScore = Number(eval_.score_total);
-    doc.fontSize(32).font('Helvetica-Bold').fillColor(scoreColor(totalScore))
+    doc
+      .fontSize(32)
+      .font('Helvetica-Bold')
+      .fillColor(scoreColor(totalScore))
       .text(`${totalScore.toFixed(1)}%`, { align: 'center' });
 
     doc.fontSize(11).font('Helvetica').fillColor(BRAND_DARK);
-    doc.text(`CORE (50%): ${Number(eval_.score_core).toFixed(1)}%   |   BASICS (35%): ${Number(eval_.score_basics).toFixed(1)}%`, { align: 'center' });
+    doc.text(
+      `CORE (50%): ${Number(eval_.score_core).toFixed(1)}%   |   BASICS (35%): ${Number(eval_.score_basics).toFixed(1)}%`,
+      { align: 'center' },
+    );
 
     doc.moveDown();
 
@@ -87,47 +95,52 @@ export async function generateEvaluationPDF(eval_: EvaluationWithRelations): Pro
 
     const sections = [
       {
-        title: 'ESCUCHA ACTIVA', items: [
+        title: 'ESCUCHA ACTIVA',
+        items: [
           ['Preguntó motivo de atraso', eval_.ea_preg_motivo_atraso],
           ['Sondeó capacidad de pago', eval_.ea_sondea_capacidad_pago],
           ['Utilizó información', eval_.ea_utiliza_informacion],
         ],
       },
       {
-        title: 'RESOLUCIÓN', items: [
+        title: 'RESOLUCIÓN',
+        items: [
           ['Negoció con urgencia', eval_.res_neg_sentido_urgencia],
           ['Negoció total RR', eval_.res_negociacion_total_rr],
           ['Ofreció herramienta', eval_.res_ofrece_herramienta],
         ],
       },
       {
-        title: 'PREVENCIÓN', items: [
-          ['Consecuencias y beneficios', eval_.prev_consecuencias_beneficios],
-        ],
+        title: 'PREVENCIÓN',
+        items: [['Consecuencias y beneficios', eval_.prev_consecuencias_beneficios]],
       },
       {
-        title: 'ESTRUCTURA / CORE (50%)', items: [
+        title: 'ESTRUCTURA / CORE (50%)',
+        items: [
           ['Apertura', eval_.core_apertura],
           ['Control', eval_.core_control],
           ['Cierre', eval_.core_cierre],
         ],
       },
       {
-        title: 'HERRAMIENTAS', items: [
+        title: 'HERRAMIENTAS',
+        items: [
           ['Sigue políticas', eval_.herr_sigue_politicas],
           ['Explica ofrecidas', eval_.herr_explica_ofrecidas],
           ['Ofrece PEX', eval_.herr_ofrece_pex],
         ],
       },
       {
-        title: 'DOCUMENTACIÓN', items: [
+        title: 'DOCUMENTACIÓN',
+        items: [
           ['Codifica', eval_.doc_codifica],
           ['Gestiones anteriores', eval_.doc_gestiones_ant],
           ['Actualiza demográficos', eval_.doc_act_demograficos],
         ],
       },
       {
-        title: 'COMPLIANCE / BASICS (35%)', items: [
+        title: 'COMPLIANCE / BASICS (35%)',
+        items: [
           ['Identificación', eval_.bas_identificacion],
           ['Información', eval_.bas_informacion],
           ['Respeto', eval_.bas_respeto],
@@ -140,9 +153,14 @@ export async function generateEvaluationPDF(eval_: EvaluationWithRelations): Pro
       doc.fontSize(11).font('Helvetica-Bold').fillColor(BRAND_DARK).text(section.title);
       for (const [label, val] of section.items) {
         const color = val === 'CUMPLE' ? GREEN : val === 'NO_CUMPLE' ? BRAND_RED : '#888888';
-        doc.fontSize(10).font('Helvetica').fillColor(BRAND_DARK)
+        doc
+          .fontSize(10)
+          .font('Helvetica')
+          .fillColor(BRAND_DARK)
           .text(`  ${label}: `, { continued: true })
-          .fillColor(color).font('Helvetica-Bold').text(scoreLabel(String(val)));
+          .fillColor(color)
+          .font('Helvetica-Bold')
+          .text(scoreLabel(String(val)));
         doc.font('Helvetica').fillColor(BRAND_DARK);
       }
       doc.moveDown(0.3);
@@ -153,7 +171,10 @@ export async function generateEvaluationPDF(eval_: EvaluationWithRelations): Pro
       doc.addPage();
       const da = eval_.debtor_analysis;
       doc.rect(0, 0, doc.page.width, 80).fill(BRAND_RED);
-      doc.fillColor('white').fontSize(16).font('Helvetica-Bold')
+      doc
+        .fillColor('white')
+        .fontSize(16)
+        .font('Helvetica-Bold')
         .text('Análisis del Deudor', 50, 30);
 
       doc.moveDown(3);
@@ -162,14 +183,23 @@ export async function generateEvaluationPDF(eval_: EvaluationWithRelations): Pro
       const daInfo = [
         ['Tipo de Justificación', da.justificacion_tipo],
         ['Promesa de Pago', da.promesa_de_pago ? 'Sí' : 'No'],
-        ['Fecha Promesa', da.fecha_promesa ? new Date(da.fecha_promesa).toLocaleDateString('es-AR') : '—'],
-        ['Monto Prometido', da.monto_prometido ? `$${da.monto_prometido.toLocaleString('es-AR')}` : '—'],
+        [
+          'Fecha Promesa',
+          da.fecha_promesa ? new Date(da.fecha_promesa).toLocaleDateString('es-AR') : '—',
+        ],
+        [
+          'Monto Prometido',
+          da.monto_prometido ? `$${da.monto_prometido.toLocaleString('es-AR')}` : '—',
+        ],
         ['Nivel de Conflicto', da.nivel_conflicto],
       ];
 
       for (const [label, value] of daInfo) {
-        doc.font('Helvetica').text(`${label}: `, { continued: true })
-          .font('Helvetica-Bold').text(String(value ?? ''));
+        doc
+          .font('Helvetica')
+          .text(`${label}: `, { continued: true })
+          .font('Helvetica-Bold')
+          .text(String(value ?? ''));
       }
 
       doc.moveDown();
@@ -189,9 +219,15 @@ export async function generateEvaluationPDF(eval_: EvaluationWithRelations): Pro
     }
 
     // ── Footer ─────────────────────────────────────────────────────────────────
-    doc.fontSize(8).fillColor('#888888')
-      .text(`Generado: ${new Date().toLocaleString('es-AR')} | Recuperos y Mandatos`,
-        50, doc.page.height - 40, { align: 'center' });
+    doc
+      .fontSize(8)
+      .fillColor('#888888')
+      .text(
+        `Generado: ${new Date().toLocaleString('es-AR')} | Recuperos y Mandatos`,
+        50,
+        doc.page.height - 40,
+        { align: 'center' },
+      );
 
     doc.end();
   });

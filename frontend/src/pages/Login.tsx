@@ -79,12 +79,14 @@ export default function Login() {
             </div>
 
             {error && (
-              <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">
-                {error}
-              </div>
+              <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</div>
             )}
 
-            <button type="submit" disabled={loading} className="btn-primary w-full flex justify-center">
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary w-full flex justify-center"
+            >
               {loading ? (
                 <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
               ) : (

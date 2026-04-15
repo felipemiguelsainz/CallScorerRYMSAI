@@ -14,7 +14,9 @@ export default function PDFExportButton({ evaluacionId, callId }: Props) {
     setLoading(true);
     try {
       const res = await evaluacionesApi.exportPdf(evaluacionId);
-      const url = URL.createObjectURL(new Blob([res.data as BlobPart], { type: 'application/pdf' }));
+      const url = URL.createObjectURL(
+        new Blob([res.data as BlobPart], { type: 'application/pdf' }),
+      );
       const a = document.createElement('a');
       a.href = url;
       a.download = `evaluacion-${callId}.pdf`;

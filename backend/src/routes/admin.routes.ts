@@ -23,14 +23,25 @@ const listUsersQuerySchema = z.object({
 });
 
 const createUserSchema = z.object({
-  username: z.string().trim().min(3, 'Usuario muy corto').max(80).regex(/^[a-zA-Z0-9._-]+$/, 'Usuario invalido'),
+  username: z
+    .string()
+    .trim()
+    .min(3, 'Usuario muy corto')
+    .max(80)
+    .regex(/^[a-zA-Z0-9._-]+$/, 'Usuario invalido'),
   role: roleSchema,
   isActive: z.boolean().optional(),
   password: z.string().min(8, 'La contrasena debe tener al menos 8 caracteres').optional(),
 });
 
 const updateUserSchema = z.object({
-  username: z.string().trim().min(3, 'Usuario muy corto').max(80).regex(/^[a-zA-Z0-9._-]+$/, 'Usuario invalido').optional(),
+  username: z
+    .string()
+    .trim()
+    .min(3, 'Usuario muy corto')
+    .max(80)
+    .regex(/^[a-zA-Z0-9._-]+$/, 'Usuario invalido')
+    .optional(),
   role: roleSchema.optional(),
   isActive: z.boolean().optional(),
   password: z.string().min(8, 'La contrasena debe tener al menos 8 caracteres').optional(),
@@ -204,7 +215,9 @@ router.patch('/users/:id', async (req: AuthRequest, res: Response) => {
     return tx.user.update({
       where: { id },
       data: {
-        ...(nextUsername !== undefined ? { username: nextUsername, name: nextUsername, email: nextEmail } : {}),
+        ...(nextUsername !== undefined
+          ? { username: nextUsername, name: nextUsername, email: nextEmail }
+          : {}),
         ...(body.role !== undefined ? { role: body.role } : {}),
         ...(nextGestorId !== existing.gestorId ? { gestorId: nextGestorId } : {}),
         ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),
@@ -241,7 +254,8 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
 
   if (assignedEvaluations > 0) {
     res.status(400).json({
-      error: 'No se puede eliminar: el usuario tiene evaluaciones asociadas. Desactivalo en su lugar.',
+      error:
+        'No se puede eliminar: el usuario tiene evaluaciones asociadas. Desactivalo en su lugar.',
     });
     return;
   }

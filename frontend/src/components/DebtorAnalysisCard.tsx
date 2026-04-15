@@ -38,7 +38,9 @@ export default function DebtorAnalysisCard({ analysis }: Props) {
 
         <div className="bg-gray-50 rounded-lg p-3">
           <p className="text-xs text-gray-500 mb-1">Nivel de Conflicto</p>
-          <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold ${conflictColors[analysis.nivel_conflicto]}`}>
+          <span
+            className={`inline-flex px-2 py-0.5 rounded text-xs font-bold ${conflictColors[analysis.nivel_conflicto]}`}
+          >
             {analysis.nivel_conflicto}
           </span>
         </div>
@@ -47,7 +49,9 @@ export default function DebtorAnalysisCard({ analysis }: Props) {
           <p className="text-xs text-gray-500 mb-1 flex items-center gap-1">
             <CheckCircle size={12} /> Promesa de Pago
           </p>
-          <p className={`text-sm font-semibold ${analysis.promesa_de_pago ? 'text-green-600' : 'text-gray-600'}`}>
+          <p
+            className={`text-sm font-semibold ${analysis.promesa_de_pago ? 'text-green-600' : 'text-gray-600'}`}
+          >
             {analysis.promesa_de_pago ? 'Sí' : 'No'}
           </p>
         </div>
@@ -83,7 +87,10 @@ export default function DebtorAnalysisCard({ analysis }: Props) {
           <AlertTriangle size={12} /> Detalle de Justificación
         </p>
         <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">
-          {DOMPurify.sanitize(analysis.justificacion_detalle, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] })}
+          {DOMPurify.sanitize(analysis.justificacion_detalle, {
+            ALLOWED_TAGS: [],
+            ALLOWED_ATTR: [],
+          })}
         </p>
       </div>
 

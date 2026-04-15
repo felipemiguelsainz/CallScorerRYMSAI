@@ -10,7 +10,8 @@ function buildPersistedRaw(
   breakdown: ReturnType<typeof calculateScores>['breakdown'],
   audioSha256: string | null,
 ): Prisma.InputJsonValue {
-  const source = existingRaw && typeof existingRaw === 'object' ? (existingRaw as Record<string, unknown>) : {};
+  const source =
+    existingRaw && typeof existingRaw === 'object' ? (existingRaw as Record<string, unknown>) : {};
   const persistedRaw = {
     ...source,
     ...(audioSha256 ? { audio_sha256: audioSha256 } : {}),

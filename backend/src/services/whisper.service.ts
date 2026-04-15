@@ -25,6 +25,9 @@ export async function transcribeAudio(filePath: string): Promise<TranscribeResul
     model: 'whisper-1',
     response_format: 'verbose_json',
     language: 'es',
+    temperature: 0,
+    prompt:
+      'Llamada de cobranza en español rioplatense. Mantener nombres y apellidos tal como se oyen. Preservar frases de identificación y motivo de no pago. No resumir ni reinterpretar.',
   });
 
   const verboseJson = response as unknown as {

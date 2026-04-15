@@ -22,6 +22,8 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - name: Install
         run: npm ci
+      - name: Audit (High/Critical)
+        run: npm run audit
       - name: Lint
         run: npm run lint
       - name: Test
@@ -45,6 +47,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install
         run: npm ci
+      - name: Audit (High/Critical)
+        run: npm audit --audit-level=high
       - name: Lint
         run: npm run lint
       - name: Test

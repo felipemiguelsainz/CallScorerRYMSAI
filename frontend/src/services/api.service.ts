@@ -5,17 +5,43 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Handle 401 globally — redirect to login
+// Shared promise avoids sending multiple /refresh calls during concurrent 401 bursts.
+let refreshPromise: Promise<unknown> | null = null;
+
+type RetryableRequestConfig = {
+  _retry?: boolean;
+  url?: string;
+};
+
+// Handle 401 globally: try token refresh once, then redirect only when session is invalid.
 api.interceptors.response.use(
   (res) => res,
-  (error) => {
+  async (error) => {
     const status = error.response?.status;
-    const requestUrl: string = error.config?.url ?? '';
+    const config = (error.config ?? {}) as RetryableRequestConfig;
+    const requestUrl: string = config.url ?? '';
     const isAuthEndpoint = requestUrl.includes('/api/v1/auth/');
+    const isAuthCheckEndpoint = requestUrl.includes('/api/v1/auth/me');
 
-    if (status === 401 && !isAuthEndpoint && window.location.pathname !== '/login') {
+    if (status === 401 && !isAuthEndpoint && !config._retry) {
+      config._retry = true;
+      try {
+        if (!refreshPromise) {
+          refreshPromise = authApi.refresh();
+        }
+        await refreshPromise;
+        return api.request(config);
+      } catch {
+        if (isAuthCheckEndpoint && window.location.pathname !== '/login') {
+          window.location.assign('/login');
+        }
+      } finally {
+        refreshPromise = null;
+      }
+    } else if (status === 401 && isAuthCheckEndpoint && window.location.pathname !== '/login') {
       window.location.assign('/login');
     }
+
     return Promise.reject(error);
   },
 );
@@ -29,19 +55,12 @@ export const authApi = {
   me: () => api.get<User>('/api/v1/auth/me'),
 };
 
-export interface AdminUserCreateResponse {
-  user: AdminUser;
-  temporaryPassword?: string;
-}
-
 // ─── GESTORES ─────────────────────────────────────────────────────────────────
 export const gestoresApi = {
   list: (params?: { role?: User['role'] }) => api.get<Gestor[]>('/api/v1/gestores', { params }),
   get: (id: string) => api.get<Gestor>(`/api/v1/gestores/${id}`),
-  create: (data: { name: string; legajo?: string }) =>
-    api.post<Gestor>('/api/v1/gestores', data),
-  evaluaciones: (id: string) =>
-    api.get<Evaluation[]>(`/api/v1/gestores/${id}/evaluaciones`),
+  create: (data: { name: string; legajo?: string }) => api.post<Gestor>('/api/v1/gestores', data),
+  evaluaciones: (id: string) => api.get<Evaluation[]>(`/api/v1/gestores/${id}/evaluaciones`),
 };
 
 // ─── EVALUACIONES ─────────────────────────────────────────────────────────────
@@ -49,8 +68,7 @@ export const evaluacionesApi = {
   list: (params?: EvaluacionesFilters) =>
     api.get<PaginatedResponse<Evaluation>>('/api/v1/evaluaciones', { params }),
   get: (id: string) => api.get<Evaluation>(`/api/v1/evaluaciones/${id}`),
-  create: (data: NewEvaluacionData) =>
-    api.post<Evaluation>('/api/v1/evaluaciones', data),
+  create: (data: NewEvaluacionData) => api.post<Evaluation>('/api/v1/evaluaciones', data),
   update: (id: string, data: Partial<Evaluation>) =>
     api.put<Evaluation>(`/api/v1/evaluaciones/${id}`, data),
   delete: (id: string) => api.delete(`/api/v1/evaluaciones/${id}`),
@@ -63,19 +81,23 @@ export const evaluacionesApi = {
       {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (evt) => {
+          // Keep uploader UI decoupled from Axios internals via a simple percentage callback.
           if (!evt.total || !onProgress) return;
           onProgress(Math.round((evt.loaded / evt.total) * 100));
         },
       },
     );
   },
-  status: (id: string) => api.get<{ status: 'processing' | 'ready' | 'error' }>(`/api/v1/evaluaciones/${id}/status`),
+  status: (id: string) =>
+    api.get<{ status: 'processing' | 'ready' | 'error' }>(`/api/v1/evaluaciones/${id}/status`),
   retranscribe: (id: string) =>
     api.post<{ message: string; evaluacion: Evaluation }>(`/api/v1/evaluaciones/${id}/transcribe`),
   score: (id: string) =>
     api.post<{ message: string; evaluacion: Evaluation }>(`/api/v1/evaluaciones/${id}/score`),
   analyzeDebtor: (id: string) =>
-    api.post<{ message: string; evaluacion: Evaluation }>(`/api/v1/evaluaciones/${id}/analyze-debtor`),
+    api.post<{ message: string; evaluacion: Evaluation }>(
+      `/api/v1/evaluaciones/${id}/analyze-debtor`,
+    ),
   complete: (id: string) =>
     api.post<{ message: string; evaluacion: Evaluation }>(`/api/v1/evaluaciones/${id}/complete`),
   exportPdf: (id: string) =>
@@ -97,8 +119,7 @@ export const adminApi = {
     api.post<AdminUserCreateResponse>('/api/v1/admin/users', data),
   updateUser: (id: string, data: AdminUserUpdateInput) =>
     api.patch<AdminUser>(`/api/v1/admin/users/${id}`, data),
-  deleteUser: (id: string) =>
-    api.delete<{ message: string }>(`/api/v1/admin/users/${id}`),
+  deleteUser: (id: string) => api.delete<{ message: string }>(`/api/v1/admin/users/${id}`),
 };
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -166,9 +187,16 @@ export type EvaluationStatus = 'DRAFT' | 'COMPLETED' | 'REVIEWED';
 export type ProcessingState = 'PENDING' | 'PROCESSING' | 'READY' | 'ERROR';
 export type ContactType = 'TITULAR' | 'TERCERO' | 'NO_CONTACTO';
 export type DebtJustification =
-  | 'NO_CONOCIA_DEUDA' | 'SIN_DINERO' | 'DISPUTA_MONTO' | 'DESEMPLEO'
-  | 'PROBLEMA_SALUD' | 'OLVIDO' | 'ACUERDO_PREVIO' | 'NIEGA_DEUDA'
-  | 'PROMESA_PAGO' | 'OTRA';
+  | 'NO_CONOCIA_DEUDA'
+  | 'SIN_DINERO'
+  | 'DISPUTA_MONTO'
+  | 'DESEMPLEO'
+  | 'PROBLEMA_SALUD'
+  | 'OLVIDO'
+  | 'ACUERDO_PREVIO'
+  | 'NIEGA_DEUDA'
+  | 'PROMESA_PAGO'
+  | 'OTRA';
 export type ConflictLevel = 'BAJO' | 'MEDIO' | 'ALTO';
 
 export interface ScoreBucketBreakdown {

@@ -7,15 +7,17 @@ import { loginLimiter } from '../middleware/rate-limit.middleware';
 
 const router = Router();
 
-const loginSchema = z.object({
-  username: z.string().trim().min(2, 'Usuario invalido').optional(),
-  usuario: z.string().trim().min(2, 'Usuario inválido').optional(),
-  email: z.string().email('Email inválido').optional(),
-  password: z.string().min(6, 'Contraseña muy corta'),
-}).refine((data) => !!data.username || !!data.usuario || !!data.email, {
-  message: 'Usuario requerido',
-  path: ['username'],
-});
+const loginSchema = z
+  .object({
+    username: z.string().trim().min(2, 'Usuario invalido').optional(),
+    usuario: z.string().trim().min(2, 'Usuario inválido').optional(),
+    email: z.string().email('Email inválido').optional(),
+    password: z.string().min(6, 'Contraseña muy corta'),
+  })
+  .refine((data) => !!data.username || !!data.usuario || !!data.email, {
+    message: 'Usuario requerido',
+    path: ['username'],
+  });
 
 // POST /api/v1/auth/login
 router.post('/login', loginLimiter, async (req: Request, res: Response) => {
@@ -45,7 +47,8 @@ router.post('/refresh', async (req: Request, res: Response) => {
 });
 
 // POST /api/v1/auth/logout
-router.post('/logout', authMiddleware, (_req: Request, res: Response) => {
+router.post('/logout', authMiddleware, async (req: AuthRequest, res: Response) => {
+  await authService.revokeRefreshTokens(req.user!.userId);
   clearAuthCookies(res);
   res.json({ message: 'Sesión cerrada correctamente' });
 });

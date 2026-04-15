@@ -7,6 +7,7 @@ export interface AuthPayload {
   email: string;
   role: Role;
   gestorId?: string;
+  sessionVersion: number;
 }
 
 export interface AuthRequest extends Request {

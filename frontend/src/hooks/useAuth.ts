@@ -1,4 +1,12 @@
-import { createContext, createElement, useState, useCallback, useEffect, useContext, ReactNode } from 'react';
+import {
+  createContext,
+  createElement,
+  useState,
+  useCallback,
+  useEffect,
+  useContext,
+  ReactNode,
+} from 'react';
 import { authApi, User } from '../services/api.service';
 
 /**

@@ -9,6 +9,7 @@ export interface TokenPayload {
   userId: string;
   email: string;
   role: Role;
+  sessionVersion: number;
   tokenType: 'access' | 'refresh';
 }
 
@@ -70,7 +71,13 @@ export function clearAuthCookies(res: Response): void {
   const secure = env.NODE_ENV === 'production' || sameSite === 'none';
   const cookieDomain = env.COOKIE_DOMAIN || undefined;
 
-  res.clearCookie('accessToken', { httpOnly: true, secure, sameSite, domain: cookieDomain, path: '/' });
+  res.clearCookie('accessToken', {
+    httpOnly: true,
+    secure,
+    sameSite,
+    domain: cookieDomain,
+    path: '/',
+  });
   res.clearCookie('refreshToken', {
     httpOnly: true,
     secure,

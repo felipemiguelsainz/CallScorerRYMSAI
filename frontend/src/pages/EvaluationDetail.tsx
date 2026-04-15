@@ -1,6 +1,11 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
-import { useEvaluacion, useScoreEvaluacion, useAnalyzeDebtor, useCompleteEvaluacion } from '../hooks/useEvaluation';
+import {
+  useEvaluacion,
+  useScoreEvaluacion,
+  useAnalyzeDebtor,
+  useCompleteEvaluacion,
+} from '../hooks/useEvaluation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import AudioUploader from '../components/AudioUploader';
 import TranscriptViewer from '../components/TranscriptViewer';
@@ -31,6 +36,7 @@ export default function EvaluationDetail() {
   const autoScoreTriggeredRef = useRef(false);
   const autoDebtorTriggeredRef = useRef(false);
 
+  // Poll only while backend is processing audio/transcript.
   const hasAudio = !!evaluation?.audio_path;
   const hasTranscript = !!evaluation?.transcript;
   const transcriptReady = hasTranscript || processingStatus?.status === 'ready';
@@ -42,6 +48,7 @@ export default function EvaluationDetail() {
 
   useEffect(() => {
     if (!id || !processingStatus?.status) return;
+    // Keep detail view synced after worker state transitions.
     void refetchEvaluation();
     void queryClient.invalidateQueries({ queryKey: ['evaluacion', id] });
   }, [id, processingStatus?.status, queryClient, refetchEvaluation]);
@@ -50,22 +57,16 @@ export default function EvaluationDetail() {
     if (!evaluation) return;
     if (!transcriptReady || hasScoringResult || scoring || autoScoreTriggeredRef.current) return;
     autoScoreTriggeredRef.current = true;
-    score(undefined, {
-      onError: () => {
-        autoScoreTriggeredRef.current = false;
-      },
-    });
+    // Trigger scoring exactly once when transcript becomes available.
+    score(undefined);
   }, [evaluation, transcriptReady, hasScoringResult, scoring, score]);
 
   useEffect(() => {
     if (!evaluation) return;
     if (!hasScoringResult || hasDebtor || analyzing || autoDebtorTriggeredRef.current) return;
     autoDebtorTriggeredRef.current = true;
-    analyzeDebtor(undefined, {
-      onError: () => {
-        autoDebtorTriggeredRef.current = false;
-      },
-    });
+    // Trigger debtor analysis once scoring is ready.
+    analyzeDebtor(undefined);
   }, [evaluation, hasScoringResult, hasDebtor, analyzing, analyzeDebtor]);
 
   if (isLoading) {
@@ -77,11 +78,7 @@ export default function EvaluationDetail() {
   }
 
   if (error || !evaluation) {
-    return (
-      <div className="card text-center text-red-600">
-        Error cargando la evaluación.
-      </div>
-    );
+    return <div className="card text-center text-red-600">Error cargando la evaluación.</div>;
   }
 
   return (
@@ -99,8 +96,8 @@ export default function EvaluationDetail() {
             Evaluación — <span className="text-brand-red">{evaluation.call_id}</span>
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Gestor: <strong>{evaluation.gestor?.name}</strong> ·
-            Auditor: <strong>{evaluation.auditor?.name}</strong> ·
+            Gestor: <strong>{evaluation.gestor?.name}</strong> · Auditor:{' '}
+            <strong>{evaluation.auditor?.name}</strong> ·
             {new Date(evaluation.capture_date).toLocaleDateString('es-AR')}
           </p>
         </div>
@@ -150,14 +147,20 @@ export default function EvaluationDetail() {
               <h3 className="text-sm font-semibold text-brand-dark mb-3">Desglose del Resultado</h3>
               <div className="grid gap-2 md:grid-cols-3">
                 {getCalculationBuckets(evaluation.ai_scoring_raw).map((bucket) => (
-                  <div key={bucket.key} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div
+                    key={bucket.key}
+                    className="rounded-lg border border-gray-200 bg-gray-50 p-3"
+                  >
                     <p className="text-xs font-semibold text-gray-500">{bucket.label}</p>
-                    <p className="mt-1 text-sm font-semibold text-brand-dark">{formatBucketScore(bucket.score)}</p>
+                    <p className="mt-1 text-sm font-semibold text-brand-dark">
+                      {formatBucketScore(bucket.score)}
+                    </p>
                     <p className="mt-1 text-xs text-gray-600">
                       Peso aplicado: {(bucket.normalizedWeight * 100).toFixed(1)}%
                     </p>
                     <p className="text-xs text-gray-500">
-                      Cumple: {bucket.cumple} · No cumple: {bucket.noCumple} · No aplica: {bucket.noAplica}
+                      Cumple: {bucket.cumple} · No cumple: {bucket.noCumple} · No aplica:{' '}
+                      {bucket.noAplica}
                     </p>
                   </div>
                 ))}
@@ -170,8 +173,12 @@ export default function EvaluationDetail() {
       )}
 
       {/* Flags */}
-      {(evaluation.flag_llamada_cortada || evaluation.flag_problema_calidad || evaluation.flag_problema_sonido ||
-        evaluation.flag_sistema_lento || evaluation.flag_conectividad || evaluation.flag_empatia_covid) && (
+      {(evaluation.flag_llamada_cortada ||
+        evaluation.flag_problema_calidad ||
+        evaluation.flag_problema_sonido ||
+        evaluation.flag_sistema_lento ||
+        evaluation.flag_conectividad ||
+        evaluation.flag_empatia_covid) && (
         <div className="card">
           <h3 className="font-semibold text-brand-dark mb-3">Flags</h3>
           <div className="flex flex-wrap gap-2">
@@ -190,9 +197,14 @@ export default function EvaluationDetail() {
         <h3 className="font-semibold text-brand-dark mb-4">Audio de la Llamada</h3>
         {hasAudio ? (
           <div className="flex items-center gap-3 text-sm text-gray-600">
-            <span>✅ Audio subido: <strong>{evaluation.audio_filename}</strong></span>
+            <span>
+              ✅ Audio subido: <strong>{evaluation.audio_filename}</strong>
+            </span>
             {evaluation.audio_duration_s && (
-              <span className="text-gray-400">({Math.floor(evaluation.audio_duration_s / 60)}:{String(evaluation.audio_duration_s % 60).padStart(2, '0')} min)</span>
+              <span className="text-gray-400">
+                ({Math.floor(evaluation.audio_duration_s / 60)}:
+                {String(evaluation.audio_duration_s % 60).padStart(2, '0')} min)
+              </span>
             )}
           </div>
         ) : (
@@ -213,7 +225,7 @@ export default function EvaluationDetail() {
       )}
 
       {/* AI Actions */}
-      {hasTranscript && (
+      {hasTranscript && (isScoring || (!isScoring && !hasScoringResult && scoringError)) && (
         <div className="card">
           <h3 className="font-semibold text-brand-dark mb-4">Proceso de IA</h3>
           <div className="flex flex-wrap gap-3">
@@ -225,10 +237,7 @@ export default function EvaluationDetail() {
             )}
 
             {!isScoring && !hasScoringResult && scoringError && (
-              <button
-                onClick={() => score(undefined)}
-                className="btn-primary"
-              >
+              <button onClick={() => score(undefined)} className="btn-primary">
                 Reintentar evaluación automática
               </button>
             )}
@@ -301,7 +310,9 @@ function StatusBadge({ status }: { status: string }) {
     REVIEWED: 'Revisada',
   };
   return (
-    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${map[status] ?? 'bg-gray-100 text-gray-600'}`}>
+    <span
+      className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${map[status] ?? 'bg-gray-100 text-gray-600'}`}
+    >
       {labels[status] ?? status}
     </span>
   );
@@ -333,8 +344,16 @@ function EvaluationProgressBar({
   return (
     <div className="card space-y-3">
       <div className="flex items-center justify-between text-xs font-semibold text-gray-600">
-        <span className={transcripcionDone ? 'text-green-700' : 'text-brand-red'}>1. Transcripción</span>
-        <span className={evaluandoDone ? 'text-green-700' : isScoring ? 'text-brand-red' : 'text-gray-500'}>2. Evaluando Diálogo</span>
+        <span className={transcripcionDone ? 'text-green-700' : 'text-brand-red'}>
+          1. Transcripción
+        </span>
+        <span
+          className={
+            evaluandoDone ? 'text-green-700' : isScoring ? 'text-brand-red' : 'text-gray-500'
+          }
+        >
+          2. Evaluando Diálogo
+        </span>
         <span className={resultadoDone ? 'text-green-700' : 'text-gray-500'}>3. Resultado</span>
       </div>
 
@@ -358,15 +377,32 @@ function EvaluationProgressBar({
   );
 }
 
-function hasEvaluationResult(evaluation: { ai_scoring_raw: object | null; score_total: number; score_core: number; score_basics: number }) {
+function hasEvaluationResult(evaluation: {
+  ai_scoring_raw: object | null;
+  score_total: number;
+  score_core: number;
+  score_basics: number;
+}) {
   if (evaluation.ai_scoring_raw) return true;
-  const hasNonZeroScore = Number(evaluation.score_total) > 0 || Number(evaluation.score_core) > 0 || Number(evaluation.score_basics) > 0;
+  const hasNonZeroScore =
+    Number(evaluation.score_total) > 0 ||
+    Number(evaluation.score_core) > 0 ||
+    Number(evaluation.score_basics) > 0;
   return hasNonZeroScore;
 }
 
 function hasCalculationBreakdown(
   raw: { calculation?: { breakdown?: unknown } } | null | undefined,
-): raw is { calculation: { breakdown: { core: BucketLike; basics: BucketLike; other: BucketLike; normalized_weights: WeightLike } } } {
+): raw is {
+  calculation: {
+    breakdown: {
+      core: BucketLike;
+      basics: BucketLike;
+      other: BucketLike;
+      normalized_weights: WeightLike;
+    };
+  };
+} {
   return Boolean(raw?.calculation?.breakdown);
 }
 
@@ -416,7 +452,16 @@ function formatBucketScore(score: number | null | undefined): string {
   return typeof score === 'number' ? `${score.toFixed(1)}%` : 'Sin criterios aplicables';
 }
 
-function DebtorIdentitySummary({ evaluation }: { evaluation: { debtor_analysis?: { justificacion_detalle: string; ai_raw_response?: { deudor_nombre?: string | null; motivo_no_pago_resumen?: string } | null } | null } }) {
+function DebtorIdentitySummary({
+  evaluation,
+}: {
+  evaluation: {
+    debtor_analysis?: {
+      justificacion_detalle: string;
+      ai_raw_response?: { deudor_nombre?: string | null; motivo_no_pago_resumen?: string } | null;
+    } | null;
+  };
+}) {
   const debtorName = (evaluation.debtor_analysis?.ai_raw_response?.deudor_nombre ?? '').trim();
   const nonPaymentReason =
     (evaluation.debtor_analysis?.ai_raw_response?.motivo_no_pago_resumen ?? '').trim() ||

@@ -2,7 +2,9 @@ import helmet from 'helmet';
 import cors from 'cors';
 import { env } from '../config/env';
 
-const allowedOrigins = env.FRONTEND_URL.split(',').map((v) => v.trim()).filter(Boolean);
+const allowedOrigins = env.FRONTEND_URL.split(',')
+  .map((v) => v.trim())
+  .filter(Boolean);
 
 export const helmetMiddleware = helmet({
   frameguard: { action: 'deny' },

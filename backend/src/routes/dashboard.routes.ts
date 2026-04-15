@@ -65,7 +65,10 @@ router.get('/kpis', async (req: AuthRequest, res: Response) => {
   });
 
   const gestorIds = topGestores.map((g) => g.gestorId);
-  const gestores = await prisma.gestor.findMany({ where: { id: { in: gestorIds } }, select: { id: true, name: true, legajo: true } });
+  const gestores = await prisma.gestor.findMany({
+    where: { id: { in: gestorIds } },
+    select: { id: true, name: true, legajo: true },
+  });
   const gestorMap = Object.fromEntries(gestores.map((g) => [g.id, g]));
 
   const payload = {
@@ -132,35 +135,42 @@ router.get('/trends', async (req: AuthRequest, res: Response) => {
   res.json(trends);
 });
 
-router.get('/ranking', requireRole('SUPERVISOR', 'ADMIN'), async (req: AuthRequest, res: Response) => {
-  const cacheKey = `dashboard:ranking:${toScopeKey(req)}`;
-  const cached = await getCachedJson<unknown>(cacheKey);
-  if (cached) {
-    res.json(cached);
-    return;
-  }
+router.get(
+  '/ranking',
+  requireRole('SUPERVISOR', 'ADMIN'),
+  async (req: AuthRequest, res: Response) => {
+    const cacheKey = `dashboard:ranking:${toScopeKey(req)}`;
+    const cached = await getCachedJson<unknown>(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
 
-  const ranking = await prisma.evaluation.groupBy({
-    by: ['gestorId'],
-    where: { deletedAt: null },
-    _avg: { score_total: true },
-    _count: { id: true },
-    orderBy: { _avg: { score_total: 'desc' } },
-  });
+    const ranking = await prisma.evaluation.groupBy({
+      by: ['gestorId'],
+      where: { deletedAt: null },
+      _avg: { score_total: true },
+      _count: { id: true },
+      orderBy: { _avg: { score_total: 'desc' } },
+    });
 
-  const gestorIds = ranking.map((r) => r.gestorId);
-  const gestores = await prisma.gestor.findMany({ where: { id: { in: gestorIds } }, select: { id: true, name: true, legajo: true } });
-  const gestorMap = Object.fromEntries(gestores.map((g) => [g.id, g]));
+    const gestorIds = ranking.map((r) => r.gestorId);
+    const gestores = await prisma.gestor.findMany({
+      where: { id: { in: gestorIds } },
+      select: { id: true, name: true, legajo: true },
+    });
+    const gestorMap = Object.fromEntries(gestores.map((g) => [g.id, g]));
 
-  const payload = ranking.map((r) => ({
-    gestor: gestorMap[r.gestorId],
-    avgScore: Number(r._avg.score_total ?? 0),
-    totalEvaluaciones: r._count.id,
-  }));
+    const payload = ranking.map((r) => ({
+      gestor: gestorMap[r.gestorId],
+      avgScore: Number(r._avg.score_total ?? 0),
+      totalEvaluaciones: r._count.id,
+    }));
 
-  await setCachedJson(cacheKey, DASHBOARD_CACHE_TTL_SECONDS, payload);
-  res.json(payload);
-});
+    await setCachedJson(cacheKey, DASHBOARD_CACHE_TTL_SECONDS, payload);
+    res.json(payload);
+  },
+);
 
 function avg(arr: number[]): number {
   if (arr.length === 0) return 0;

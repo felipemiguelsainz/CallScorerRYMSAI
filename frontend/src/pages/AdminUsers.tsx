@@ -69,7 +69,10 @@ export default function AdminUsers() {
       }
 
       const payload = raw as {
-        data?: Array<AdminUser & Partial<Pick<User, 'isActive' | 'authProvider' | 'externalAuthId' | 'lastLoginAt'>>>;
+        data?: Array<
+          AdminUser &
+            Partial<Pick<User, 'isActive' | 'authProvider' | 'externalAuthId' | 'lastLoginAt'>>
+        >;
         total?: number;
         page?: number;
         limit?: number;
@@ -101,7 +104,11 @@ export default function AdminUsers() {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     },
     onError: (error: { response?: { data?: { error?: string; message?: string } } }) => {
-      setErrorMessage(error.response?.data?.error ?? error.response?.data?.message ?? 'No se pudo crear el usuario.');
+      setErrorMessage(
+        error.response?.data?.error ??
+          error.response?.data?.message ??
+          'No se pudo crear el usuario.',
+      );
     },
   });
 
@@ -114,7 +121,11 @@ export default function AdminUsers() {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     },
     onError: (error: { response?: { data?: { error?: string; message?: string } } }) => {
-      setErrorMessage(error.response?.data?.error ?? error.response?.data?.message ?? 'No se pudo actualizar el usuario.');
+      setErrorMessage(
+        error.response?.data?.error ??
+          error.response?.data?.message ??
+          'No se pudo actualizar el usuario.',
+      );
     },
   });
 
@@ -126,7 +137,11 @@ export default function AdminUsers() {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     },
     onError: (error: { response?: { data?: { error?: string; message?: string } } }) => {
-      setErrorMessage(error.response?.data?.error ?? error.response?.data?.message ?? 'No se pudo eliminar el usuario.');
+      setErrorMessage(
+        error.response?.data?.error ??
+          error.response?.data?.message ??
+          'No se pudo eliminar el usuario.',
+      );
     },
   });
 
@@ -175,7 +190,9 @@ export default function AdminUsers() {
   function deleteUser(user: AdminUser) {
     setErrorMessage(null);
     const label = user.username ?? user.email;
-    const confirmed = window.confirm(`¿Seguro que querés eliminar al usuario ${label}? Esta acción no se puede deshacer.`);
+    const confirmed = window.confirm(
+      `¿Seguro que querés eliminar al usuario ${label}? Esta acción no se puede deshacer.`,
+    );
     if (!confirmed) return;
     deleteMutation.mutate(user.id);
   }
@@ -185,7 +202,9 @@ export default function AdminUsers() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-brand-dark">Administracion de usuarios</h1>
-          <p className="text-sm text-gray-500">Gestiona accesos, roles y proveedores de autenticacion.</p>
+          <p className="text-sm text-gray-500">
+            Gestiona accesos, roles y proveedores de autenticacion.
+          </p>
         </div>
         <span className="text-sm text-gray-500">Total: {usersResponse?.total ?? 0}</span>
       </div>
@@ -204,10 +223,14 @@ export default function AdminUsers() {
           <select
             className="input"
             value={createForm.role}
-            onChange={(e) => setCreateForm((prev) => ({ ...prev, role: e.target.value as User['role'] }))}
+            onChange={(e) =>
+              setCreateForm((prev) => ({ ...prev, role: e.target.value as User['role'] }))
+            }
           >
             {ROLE_OPTIONS.map((role) => (
-              <option key={role} value={role}>{role}</option>
+              <option key={role} value={role}>
+                {role}
+              </option>
             ))}
           </select>
 
@@ -227,7 +250,8 @@ export default function AdminUsers() {
 
         {temporaryPasswordNotice && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            Contraseña temporal generada: <span className="font-semibold">{temporaryPasswordNotice}</span>
+            Contraseña temporal generada:{' '}
+            <span className="font-semibold">{temporaryPasswordNotice}</span>
           </div>
         )}
       </section>
@@ -241,14 +265,24 @@ export default function AdminUsers() {
             onChange={(e) => setSearch(e.target.value)}
           />
 
-          <select className="input" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as 'ALL' | User['role'])}>
+          <select
+            className="input"
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value as 'ALL' | User['role'])}
+          >
             <option value="ALL">Todos los roles</option>
             {ROLE_OPTIONS.map((role) => (
-              <option key={role} value={role}>{role}</option>
+              <option key={role} value={role}>
+                {role}
+              </option>
             ))}
           </select>
 
-          <select className="input" value={activeFilter} onChange={(e) => setActiveFilter(e.target.value as 'ALL' | 'true' | 'false')}>
+          <select
+            className="input"
+            value={activeFilter}
+            onChange={(e) => setActiveFilter(e.target.value as 'ALL' | 'true' | 'false')}
+          >
             <option value="ALL">Todos</option>
             <option value="true">Activos</option>
             <option value="false">Inactivos</option>
@@ -270,94 +304,121 @@ export default function AdminUsers() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td className="py-4 text-gray-500" colSpan={4}>Cargando usuarios...</td>
+                  <td className="py-4 text-gray-500" colSpan={4}>
+                    Cargando usuarios...
+                  </td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td className="py-4 text-gray-500" colSpan={4}>No hay usuarios que coincidan con los filtros.</td>
+                  <td className="py-4 text-gray-500" colSpan={4}>
+                    No hay usuarios que coincidan con los filtros.
+                  </td>
                 </tr>
-              ) : users.map((user) => {
-                const isEditing = editingUserId === user.id;
-                return (
-                  <tr key={user.id} className="border-b border-gray-100 align-top">
-                    <td className="py-3 pr-4 min-w-64">
-                      {isEditing ? (
-                        <div className="space-y-1">
-                          <input
+              ) : (
+                users.map((user) => {
+                  const isEditing = editingUserId === user.id;
+                  return (
+                    <tr key={user.id} className="border-b border-gray-100 align-top">
+                      <td className="py-3 pr-4 min-w-64">
+                        {isEditing ? (
+                          <div className="space-y-1">
+                            <input
+                              className="input"
+                              value={editForm.username}
+                              onChange={(e) =>
+                                setEditForm((prev) => ({ ...prev, username: e.target.value }))
+                              }
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {user.username ?? user.email}
+                            </p>
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 pr-4">
+                        {isEditing ? (
+                          <select
                             className="input"
-                            value={editForm.username}
-                            onChange={(e) => setEditForm((prev) => ({ ...prev, username: e.target.value }))}
-                          />
-                        </div>
-                      ) : (
-                        <div>
-                          <p className="font-medium text-gray-900">{user.username ?? user.email}</p>
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3 pr-4">
-                      {isEditing ? (
-                        <select
-                          className="input"
-                          value={editForm.role}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, role: e.target.value as User['role'] }))}
-                        >
-                          {ROLE_OPTIONS.map((role) => (
-                            <option key={role} value={role}>{role}</option>
-                          ))}
-                        </select>
-                      ) : user.role}
-                    </td>
-                    <td className="py-3 pr-4">
-                      {isEditing ? (
-                        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                          <input
-                            type="checkbox"
-                            checked={editForm.isActive}
-                            onChange={(e) => setEditForm((prev) => ({ ...prev, isActive: e.target.checked }))}
-                          />
-                          Activo
-                        </label>
-                      ) : (
-                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${user.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
-                          {user.isActive ? 'Activo' : 'Inactivo'}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3">
-                      {isEditing ? (
-                        <div className="flex gap-2">
-                          <button
-                            className="btn-primary"
-                            type="button"
-                            onClick={() => saveEdit(user.id)}
-                            disabled={updateMutation.isPending}
+                            value={editForm.role}
+                            onChange={(e) =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                role: e.target.value as User['role'],
+                              }))
+                            }
                           >
-                            Guardar
-                          </button>
-                          <button className="btn-secondary" type="button" onClick={cancelEdit}>
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex gap-2">
-                          <button className="btn-secondary" type="button" onClick={() => startEdit(user)}>
-                            Editar
-                          </button>
-                          <button
-                            className="px-3 py-2 rounded-lg text-sm font-semibold border border-red-200 text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            type="button"
-                            onClick={() => deleteUser(user)}
-                            disabled={deleteMutation.isPending}
+                            {ROLE_OPTIONS.map((role) => (
+                              <option key={role} value={role}>
+                                {role}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          user.role
+                        )}
+                      </td>
+                      <td className="py-3 pr-4">
+                        {isEditing ? (
+                          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                              type="checkbox"
+                              checked={editForm.isActive}
+                              onChange={(e) =>
+                                setEditForm((prev) => ({ ...prev, isActive: e.target.checked }))
+                              }
+                            />
+                            Activo
+                          </label>
+                        ) : (
+                          <span
+                            className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${user.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}
                           >
-                            {deleteMutation.isPending ? 'Eliminando...' : 'Eliminar'}
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+                            {user.isActive ? 'Activo' : 'Inactivo'}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3">
+                        {isEditing ? (
+                          <div className="flex gap-2">
+                            <button
+                              className="btn-primary"
+                              type="button"
+                              onClick={() => saveEdit(user.id)}
+                              disabled={updateMutation.isPending}
+                            >
+                              Guardar
+                            </button>
+                            <button className="btn-secondary" type="button" onClick={cancelEdit}>
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <button
+                              className="btn-secondary"
+                              type="button"
+                              onClick={() => startEdit(user)}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              className="px-3 py-2 rounded-lg text-sm font-semibold border border-red-200 text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              type="button"
+                              onClick={() => deleteUser(user)}
+                              disabled={deleteMutation.isPending}
+                            >
+                              {deleteMutation.isPending ? 'Eliminando...' : 'Eliminar'}
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

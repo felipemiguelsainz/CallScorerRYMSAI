@@ -60,7 +60,12 @@ export interface CalculatedScores {
 }
 
 const CORE_FIELDS: (keyof ScoringFields)[] = ['core_apertura', 'core_control', 'core_cierre'];
-const BASICS_FIELDS: (keyof ScoringFields)[] = ['bas_identificacion', 'bas_informacion', 'bas_respeto', 'bas_veracidad'];
+const BASICS_FIELDS: (keyof ScoringFields)[] = [
+  'bas_identificacion',
+  'bas_informacion',
+  'bas_respeto',
+  'bas_veracidad',
+];
 const OTHER_FIELDS: (keyof ScoringFields)[] = [
   'ea_preg_motivo_atraso',
   'ea_sondea_capacidad_pago',
@@ -247,9 +252,18 @@ export function calculateScores(eval_: Partial<ScoringFields>): CalculatedScores
   const totalApplicableWeight = applicableBuckets.reduce((sum, bucket) => sum + bucket.weight, 0);
 
   const normalizedWeights = {
-    core: totalApplicableWeight === 0 || core.applicable === 0 ? 0 : core.weight / totalApplicableWeight,
-    basics: totalApplicableWeight === 0 || basics.applicable === 0 ? 0 : basics.weight / totalApplicableWeight,
-    other: totalApplicableWeight === 0 || other.applicable === 0 ? 0 : other.weight / totalApplicableWeight,
+    core:
+      totalApplicableWeight === 0 || core.applicable === 0
+        ? 0
+        : core.weight / totalApplicableWeight,
+    basics:
+      totalApplicableWeight === 0 || basics.applicable === 0
+        ? 0
+        : basics.weight / totalApplicableWeight,
+    other:
+      totalApplicableWeight === 0 || other.applicable === 0
+        ? 0
+        : other.weight / totalApplicableWeight,
   };
 
   const weightedTotal = applicableBuckets.reduce((sum, bucket) => {
@@ -307,7 +321,9 @@ function fallbackDialogueFormat(transcript: string): string {
 
   if (normalized.length === 0) return transcript;
 
-  const dialogue = normalized.map((line, index) => `${index % 2 === 0 ? 'GESTOR' : 'DEUDOR'}: ${line}`);
+  const dialogue = normalized.map(
+    (line, index) => `${index % 2 === 0 ? 'GESTOR' : 'DEUDOR'}: ${line}`,
+  );
   return dialogue.join('\n');
 }
 

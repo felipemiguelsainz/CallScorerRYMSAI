@@ -7,9 +7,27 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+function resolveSeedPassword(envName: string, devFallback: string): string {
+  const fromEnv = process.env[envName]?.trim();
+  if (fromEnv) return fromEnv;
+
+  // In production, seeded users must never rely on well-known default passwords.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(`${envName} is required when NODE_ENV=production`);
+  }
+
+  return devFallback;
+}
+
 async function main() {
-  const adminPassword = await bcrypt.hash('Admin1234', 12);
-  const gestorPassword = await bcrypt.hash('Gestor1234', 12);
+  const adminPassword = await bcrypt.hash(
+    resolveSeedPassword('SEED_ADMIN_PASSWORD', 'Admin1234'),
+    12,
+  );
+  const gestorPassword = await bcrypt.hash(
+    resolveSeedPassword('SEED_GESTOR_PASSWORD', 'Gestor1234'),
+    12,
+  );
 
   // Clean up legacy demo data created in early scaffolding.
   await prisma.user.deleteMany({

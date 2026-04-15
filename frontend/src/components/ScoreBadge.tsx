@@ -7,10 +7,15 @@ interface Props {
 const config: Record<ScoreValue, { label: string; className: string }> = {
   CUMPLE: { label: 'CUMPLE', className: 'badge-cumple' },
   NO_CUMPLE: { label: 'NO CUMPLE', className: 'badge-no-cumple' },
-  NO_APLICA: { label: 'N/A', className: 'badge-no-aplica' },
+  NO_APLICA: { label: 'NO APLICA', className: 'badge-no-aplica' },
 };
 
 export default function ScoreBadge({ value }: Props) {
   const { label, className } = config[value];
-  return <span className={className}>{label}</span>;
+  return (
+    <span className={`score-badge ${className}`}>
+      <span className="score-dot" aria-hidden="true" />
+      <span>{label}</span>
+    </span>
+  );
 }
