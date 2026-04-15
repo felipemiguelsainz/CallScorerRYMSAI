@@ -350,10 +350,6 @@ router.post(
   },
 );
 
-router.post('/:id/transcribe', async (_req: AuthRequest, res: Response) => {
-  res.status(400).json({ error: 'Endpoint deshabilitado: use upload-audio y status polling.' });
-});
-
 router.post(
   '/:id/score',
   requireRole('AUDITOR', 'SUPERVISOR', 'ADMIN'),

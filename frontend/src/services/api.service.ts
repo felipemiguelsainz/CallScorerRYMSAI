@@ -90,8 +90,6 @@ export const evaluacionesApi = {
   },
   status: (id: string) =>
     api.get<{ status: 'processing' | 'ready' | 'error' }>(`/api/v1/evaluaciones/${id}/status`),
-  retranscribe: (id: string) =>
-    api.post<{ message: string; evaluacion: Evaluation }>(`/api/v1/evaluaciones/${id}/transcribe`),
   score: (id: string) =>
     api.post<{ message: string; evaluacion: Evaluation }>(`/api/v1/evaluaciones/${id}/score`),
   analyzeDebtor: (id: string) =>

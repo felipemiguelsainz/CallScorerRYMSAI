@@ -27,7 +27,7 @@ if ([string]::IsNullOrWhiteSpace($jwt)) {
   throw 'JWT_SECRET is empty in backend/.env'
 }
 
-docker rm -f callscorerrymsai_backend_dev callscorerrymsai_worker_dev 2>$null | Out-Null
+& { $ErrorActionPreference = 'SilentlyContinue'; docker rm -f callscorerrymsai_backend_dev callscorerrymsai_worker_dev 2>&1 | Out-Null }
 
 docker run -d --net listenai2_default --name callscorerrymsai_backend_dev -p 3001:3001 -v "${backendPath}:/app" -w /app -e DATABASE_URL="postgresql://postgres:postgres@${pgIp}:5432/callscorerrymsai_db" -e REDIS_URL="redis://${redisIp}:6379" -e OPENAI_API_KEY="$openai" -e JWT_SECRET="$jwt" -e JWT_ACCESS_EXPIRES_IN="15m" -e JWT_REFRESH_EXPIRES_IN="7d" -e FRONTEND_URL="http://localhost:5173" -e PORT="3001" -e UPLOADS_DIR="/app/secure-uploads" -e NODE_ENV="development" node:20 sh -lc "npm install; npx prisma migrate deploy --schema=prisma/schema.prisma; npm run prisma:seed; npm run dev" | Out-Null
 
