@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l /c/Users/felip/listenAi2/backend/src/**/*.ts /c/Users/felip/listenAi2/frontend/src/**/*.tsx /c/Users/felip/listenAi2/frontend/src/**/*.ts)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(npx tsc *)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File 'C:\\\\Users\\\\felip\\\\listenAi2\\\\scripts\\\\dev-minimal-up.ps1')",
+      "Bash(git push *)",
+      "Bash(git add *)",
+      "Bash(git rm *)",
+      "Bash(git commit -m ' *)",
+      "Bash(gh run *)",
+      "Read(//c/Users/felip/.config/gh/**)",
+      "Bash(curl -s -H \"Authorization: token $\\(cat /c/Users/felip/.config/gh/hosts.yml)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); r=d['workflow_runs'][0]; print\\(r['id'], r['status'], r['conclusion']\\)\")",
+      "Bash(npm run *)",
+      "Bash(npm audit *)"
+    ]
+  }
+}
