@@ -13,6 +13,7 @@ import gestoresRoutes from './routes/gestores.routes';
 import evaluacionesRoutes from './routes/evaluaciones.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import adminRoutes from './routes/admin.routes';
+import clientesRoutes from './routes/clientes.routes';
 import { env } from './config/env';
 import { apiLimiter } from './middleware/rate-limit.middleware';
 import { corsMiddleware, helmetMiddleware } from './middleware/security.middleware';
@@ -46,6 +47,7 @@ app.use('/api/v1/gestores', gestoresRoutes);
 app.use('/api/v1/evaluaciones', evaluacionesRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/clientes', clientesRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

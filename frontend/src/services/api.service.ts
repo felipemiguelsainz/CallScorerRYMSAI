@@ -104,9 +104,30 @@ export const evaluacionesApi = {
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 export const dashboardApi = {
-  kpis: () => api.get<DashboardKpis>('/api/v1/dashboard/kpis'),
+  kpis: (params?: DashboardFilters) => api.get<DashboardKpis>('/api/v1/dashboard/kpis', { params }),
   trends: (days?: number) =>
     api.get<TrendPoint[]>('/api/v1/dashboard/trends', { params: { days } }),
+  kpisExtended: (params?: DashboardFilters) =>
+    api.get<DashboardKpisExtended>('/api/v1/dashboard/kpis-extended', { params }),
+  scorePorCliente: (params?: DashboardFilters) =>
+    api.get<ScorePorClienteItem[]>('/api/v1/dashboard/score-por-cliente', { params }),
+  rankingGestores: (params?: DashboardFilters) =>
+    api.get<RankingGestoresResponse>('/api/v1/dashboard/ranking-gestores', { params }),
+  fallasTipicas: (params?: DashboardFilters) =>
+    api.get<FallaTipica[]>('/api/v1/dashboard/fallas-tipicas', { params }),
+  fallasCriticas: (params?: DashboardFilters) =>
+    api.get<FallaCritica[]>('/api/v1/dashboard/fallas-criticas', { params }),
+  scoreCriterios: (params?: DashboardFilters) =>
+    api.get<ScoreCriterio[]>('/api/v1/dashboard/score-criterios', { params }),
+};
+
+// ─── CLIENTES ─────────────────────────────────────────────────────────────────
+export const clientesApi = {
+  list: (params?: { search?: string; isActive?: boolean }) =>
+    api.get<{ data: Cliente[]; total: number }>('/api/v1/clientes', { params }),
+  create: (data: ClienteCreateInput) => api.post<Cliente>('/api/v1/clientes', data),
+  update: (id: string, data: ClienteUpdateInput) => api.put<Cliente>(`/api/v1/clientes/${id}`, data),
+  delete: (id: string) => api.delete(`/api/v1/clientes/${id}`),
 };
 
 // ─── ADMIN ────────────────────────────────────────────────────────────────────
@@ -257,6 +278,8 @@ export interface Evaluation {
   capture_date: string;
   gestorId: string;
   auditorId: string;
+  clienteId?: string | null;
+  cliente?: Pick<Cliente, 'id' | 'nombre' | 'icono'> | null;
   gestor?: Gestor;
   auditor?: Pick<User, 'id' | 'name' | 'email'>;
   audio_filename: string;
@@ -313,9 +336,12 @@ export interface NewEvaluacionData {
 
 export interface EvaluacionesFilters {
   gestorId?: string;
+  clienteId?: string;
   status?: EvaluationStatus;
   from?: string;
   to?: string;
+  fechaDesde?: string;
+  fechaHasta?: string;
   minScore?: number;
   page?: number;
   limit?: number;
@@ -349,4 +375,80 @@ export interface TrendPoint {
   avgCore: number;
   avgBasics: number;
   count: number;
+}
+
+// ─── CLIENTE ─────────────────────────────────────────────────────────────────
+
+export interface Cliente {
+  id: string;
+  nombre: string;
+  codigo: string;
+  icono?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  _count?: { evaluations: number };
+}
+
+export interface ClienteCreateInput {
+  nombre: string;
+  codigo: string;
+  icono?: string;
+  isActive: boolean;
+}
+
+export type ClienteUpdateInput = Partial<ClienteCreateInput>;
+
+// ─── DASHBOARD EXTENDED TYPES ─────────────────────────────────────────────────
+
+export interface DashboardFilters {
+  clienteId?: string;
+  gestorId?: string;
+  fechaDesde?: string;
+  fechaHasta?: string;
+}
+
+export interface DashboardKpisExtended {
+  cumplimientoSpeech: number;
+  cumplimientoSpeechDelta: number;
+  promesasDePago: number;
+  montoRecuperado: number;
+}
+
+export interface ScorePorClienteItem {
+  clienteId: string;
+  nombre: string;
+  icono: string;
+  avgScore: number;
+  total: number;
+}
+
+export interface RankingGestorItem {
+  gestorId: string;
+  nombre: string;
+  score: number;
+  llamadas: number;
+  tendencia: 'up' | 'down';
+}
+
+export interface RankingGestoresResponse {
+  mejores: RankingGestorItem[];
+  peores: RankingGestorItem[];
+}
+
+export interface FallaTipica {
+  key: string;
+  label: string;
+  pctNoCumple: number;
+  total: number;
+}
+
+export interface FallaCritica {
+  name: string;
+  value: number;
+}
+
+export interface ScoreCriterio {
+  label: string;
+  actual: number;
+  anterior: number;
 }

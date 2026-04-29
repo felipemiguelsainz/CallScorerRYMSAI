@@ -52,6 +52,23 @@ model Gestor {
   @@map("gestores")
 }
 
+model Cliente {
+  id          String       @id @default(uuid())
+  nombre      String       @db.VarChar(150)
+  codigo      String       @unique @db.VarChar(50)
+  icono       String?      @db.VarChar(10)
+  isActive    Boolean      @default(true)
+  evaluations Evaluation[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+
+  @@index([nombre])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("clientes")
+}
+
 model Evaluation {
   id String @id @default(uuid())
 
@@ -62,6 +79,10 @@ model Evaluation {
   contact_type      ContactType
   assignment_date   DateTime
   capture_date      DateTime    @default(now())
+
+  // ─── CLIENTE ──────────────────────────────────────────────
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
 
   // ─── GESTOR & AUDITOR ─────────────────────────────────────
   gestor    Gestor @relation(fields: [gestorId], references: [id], onDelete: Restrict)
@@ -144,6 +165,7 @@ model Evaluation {
   @@index([call_id])
   @@index([gestorId, capture_date])
   @@index([deletedAt])
+  @@index([clienteId])
   @@map("evaluations")
 }
 

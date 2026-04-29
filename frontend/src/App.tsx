@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import NewEvaluation from './pages/NewEvaluation';
 import EvaluationDetail from './pages/EvaluationDetail';
 import AdminUsers from './pages/AdminUsers';
+import AdminClientes from './pages/AdminClientes';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -30,11 +31,20 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
+  if (!user || user.role !== 'ADMIN') return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
 
-  if (!user || user.role !== 'ADMIN') {
-    return <Navigate to="/" replace />;
+function AdminOrSupervisorRoute({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <span className="animate-spin h-8 w-8 border-4 border-brand-red border-t-transparent rounded-full" />
+      </div>
+    );
   }
-
+  if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPERVISOR')) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -60,6 +70,14 @@ export default function App() {
               <AdminRoute>
                 <AdminUsers />
               </AdminRoute>
+            }
+          />
+          <Route
+            path="admin/clientes"
+            element={
+              <AdminOrSupervisorRoute>
+                <AdminClientes />
+              </AdminOrSupervisorRoute>
             }
           />
         </Route>

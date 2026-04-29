@@ -99,7 +99,7 @@ const updateEvaluacionSchema = z.object({
 });
 
 router.get('/', async (req: AuthRequest, res: Response) => {
-  const { status, minScore, limit = '20', cursor } = req.query as Record<string, string>;
+  const { status, minScore, limit = '20', cursor, gestorId, clienteId, fechaDesde, fechaHasta } = req.query as Record<string, string>;
   const take = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
 
   if (cursor) {
@@ -115,6 +115,15 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     ...(req.scopeFilter ?? {}),
     ...(status ? { status: status as Prisma.EnumEvaluationStatusFilter['equals'] } : {}),
     ...(minScore ? { score_total: { gte: new Prisma.Decimal(minScore) } } : {}),
+    // gestorId filter only applies if user is not GESTOR (scope already handles that)
+    ...(gestorId && req.user?.role !== 'GESTOR' ? { gestorId } : {}),
+    ...(clienteId ? { clienteId } : {}),
+    ...((fechaDesde || fechaHasta) ? {
+      capture_date: {
+        ...(fechaDesde ? { gte: new Date(fechaDesde) } : {}),
+        ...(fechaHasta ? { lte: new Date(fechaHasta) } : {}),
+      },
+    } : {}),
   };
 
   const data = await prisma.evaluation.findMany({
