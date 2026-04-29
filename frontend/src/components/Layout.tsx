@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { LayoutDashboard, PlusCircle, LogOut, Users, Building2 } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, LogOut, Settings } from 'lucide-react';
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -16,10 +16,7 @@ export default function Layout() {
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/evaluaciones/nueva', label: 'Nueva Evaluación', icon: PlusCircle },
     ...(user?.role === 'ADMIN' || user?.role === 'SUPERVISOR'
-      ? [{ path: '/admin/clientes', label: 'Clientes', icon: Building2 }]
-      : []),
-    ...(user?.role === 'ADMIN'
-      ? [{ path: '/admin/usuarios', label: 'Usuarios', icon: Users }]
+      ? [{ path: '/admin', label: 'Administración', icon: Settings }]
       : []),
   ];
 
@@ -60,7 +57,7 @@ export default function Layout() {
                 <Link
                   to={path}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === path
+                    location.pathname === path || (path !== '/' && location.pathname.startsWith(path))
                       ? 'bg-brand-red text-white'
                       : 'text-brand-dark hover:bg-gray-200'
                   }`}

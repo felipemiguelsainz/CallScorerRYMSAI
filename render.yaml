@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: callscorerrymsai-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: UPLOADS_DIR
+        value: /app/secure-uploads
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      # ── Required secrets: set these in the Render dashboard manually ──────
+      - key: DATABASE_URL
+        sync: false        # Set manually in Render → Environment
+      - key: REDIS_URL
+        sync: false        # Set manually (Render Redis URL or external)
+      - key: OPENAI_API_KEY
+        sync: false        # Set manually
+      - key: JWT_SECRET
+        sync: false        # Set manually (openssl rand -base64 32)
+      - key: FRONTEND_URL
+        sync: false        # e.g. https://callscorerrymsai.onrender.com
+      - key: COOKIE_SAME_SITE
+        value: none        # Required for cross-origin cookies on Render
+      - key: SEED_ADMIN_PASSWORD
+        sync: false        # Optional: override default seed password

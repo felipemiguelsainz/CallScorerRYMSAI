@@ -4,8 +4,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import NewEvaluation from './pages/NewEvaluation';
 import EvaluationDetail from './pages/EvaluationDetail';
-import AdminUsers from './pages/AdminUsers';
-import AdminClientes from './pages/AdminClientes';
+import AdminPanel from './pages/AdminPanel';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -22,18 +21,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <span className="animate-spin h-8 w-8 border-4 border-brand-red border-t-transparent rounded-full" />
-      </div>
-    );
-  }
-  if (!user || user.role !== 'ADMIN') return <Navigate to="/" replace />;
-  return <>{children}</>;
-}
 
 function AdminOrSupervisorRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -65,18 +52,10 @@ export default function App() {
           <Route path="evaluaciones/nueva" element={<NewEvaluation />} />
           <Route path="evaluaciones/:id" element={<EvaluationDetail />} />
           <Route
-            path="admin/usuarios"
-            element={
-              <AdminRoute>
-                <AdminUsers />
-              </AdminRoute>
-            }
-          />
-          <Route
-            path="admin/clientes"
+            path="admin"
             element={
               <AdminOrSupervisorRoute>
-                <AdminClientes />
+                <AdminPanel />
               </AdminOrSupervisorRoute>
             }
           />

@@ -23,23 +23,49 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import {
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
   Tooltip,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
   CartesianGrid,
   Legend,
   LineChart,
   Line,
+  XAxis,
+  YAxis,
 } from 'recharts';
 
 // ─── CONSTANTES ───────────────────────────────────────────────────────────────
 const BRAND_RED = '#CC0000';
-const GAUGE_COLORS = [BRAND_RED, '#f0f0f0'];
+
+// ─── MINI GAUGE SVG ───────────────────────────────────────────────────────────
+function MiniGauge({ value }: { value: number }) {
+  const r = 30;
+  const cx = 45;
+  const cy = 45;
+  const circumference = 2 * Math.PI * r;
+  const pct = Math.min(Math.max(value, 0), 100) / 100;
+  const filled = pct * circumference;
+  const gap = circumference - filled;
+
+  return (
+    <div className="relative inline-flex items-center justify-center">
+      <svg width={90} height={90} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f0f0f0" strokeWidth={10} />
+        <circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill="none"
+          stroke={BRAND_RED}
+          strokeWidth={10}
+          strokeDasharray={`${filled} ${gap}`}
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="absolute text-lg font-bold text-brand-dark">
+        {value.toFixed(0)}%
+      </span>
+    </div>
+  );
+}
 
 // ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
 export default function Dashboard() {
@@ -128,30 +154,7 @@ export default function Dashboard() {
           {/* Score general con mini gauge */}
           <div className="card flex flex-col items-center py-4">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Score General</p>
-            <div className="relative">
-              <PieChart width={90} height={90}>
-                <Pie
-                  data={[
-                    { value: kpisExt.scorePromedio },
-                    { value: Math.max(0, 100 - kpisExt.scorePromedio) },
-                  ]}
-                  cx={40}
-                  cy={40}
-                  startAngle={90}
-                  endAngle={-270}
-                  innerRadius={28}
-                  outerRadius={40}
-                  dataKey="value"
-                  strokeWidth={0}
-                >
-                  <Cell fill={BRAND_RED} />
-                  <Cell fill="#f0f0f0" />
-                </Pie>
-              </PieChart>
-              <span className="absolute inset-0 flex items-center justify-center text-lg font-bold text-brand-dark">
-                {kpisExt.scorePromedio.toFixed(0)}%
-              </span>
-            </div>
+            <MiniGauge value={kpisExt.scorePromedio} />
           </div>
 
           <div className="card flex flex-col justify-center">
