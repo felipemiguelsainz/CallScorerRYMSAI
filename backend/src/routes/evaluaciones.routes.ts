@@ -133,6 +133,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     include: {
       gestor: { select: { id: true, name: true, legajo: true } },
       auditor: { select: { id: true, name: true, email: true } },
+      cliente: { select: { id: true, nombre: true, icono: true } },
       debtor_analysis: {
         select: {
           id: true,

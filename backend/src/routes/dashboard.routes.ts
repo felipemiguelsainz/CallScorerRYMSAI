@@ -39,14 +39,14 @@ function buildPrevPeriodFilter(req: AuthRequest) {
 }
 
 router.get('/kpis', async (req: AuthRequest, res: Response) => {
-  const cacheKey = `dashboard:kpis:${toScopeKey(req)}`;
+  const cacheKey = `dashboard:kpis:${toScopeKey(req)}:${JSON.stringify(req.query)}`;
   const cached = await getCachedJson<unknown>(cacheKey);
   if (cached) {
     res.json(cached);
     return;
   }
 
-  const scopeFilter = { deletedAt: null, ...(req.scopeFilter ?? {}) };
+  const scopeFilter = buildDashboardFilter(req);
 
   const [totalEvaluaciones, completadas, avgScores] = await Promise.all([
     prisma.evaluation.count({ where: scopeFilter }),
@@ -111,7 +111,7 @@ router.get('/kpis', async (req: AuthRequest, res: Response) => {
 
 router.get('/trends', async (req: AuthRequest, res: Response) => {
   const { days = '30' } = req.query as Record<string, string>;
-  const cacheKey = `dashboard:trends:${toScopeKey(req)}:${days}`;
+  const cacheKey = `dashboard:trends:${toScopeKey(req)}:${JSON.stringify(req.query)}`;
   const cached = await getCachedJson<unknown>(cacheKey);
   if (cached) {
     res.json(cached);
@@ -121,11 +121,12 @@ router.get('/trends', async (req: AuthRequest, res: Response) => {
   const fromDate = new Date();
   fromDate.setDate(fromDate.getDate() - parseInt(days, 10));
 
+  const baseFilter = buildDashboardFilter(req);
   const where = {
-    deletedAt: null,
+    ...baseFilter,
     status: 'COMPLETED' as const,
-    capture_date: { gte: fromDate },
-    ...(req.scopeFilter ?? {}),
+    // If no date filter specified, apply the days-based filter
+    ...(!req.query.fechaDesde && !req.query.fechaHasta ? { capture_date: { gte: fromDate } } : {}),
   };
 
   const evaluaciones = await prisma.evaluation.findMany({
@@ -159,16 +160,18 @@ router.get(
   '/ranking',
   requireRole('SUPERVISOR', 'ADMIN'),
   async (req: AuthRequest, res: Response) => {
-    const cacheKey = `dashboard:ranking:${toScopeKey(req)}`;
+    const cacheKey = `dashboard:ranking:${toScopeKey(req)}:${JSON.stringify(req.query)}`;
     const cached = await getCachedJson<unknown>(cacheKey);
     if (cached) {
       res.json(cached);
       return;
     }
 
+    const scopeFilter = buildDashboardFilter(req);
+
     const ranking = await prisma.evaluation.groupBy({
       by: ['gestorId'],
-      where: { deletedAt: null },
+      where: scopeFilter,
       _avg: { score_total: true },
       _count: { id: true },
       orderBy: { _avg: { score_total: 'desc' } },
@@ -490,6 +493,90 @@ router.get('/score-criterios', async (req: AuthRequest, res: Response) => {
 
   await setCachedJson(cacheKey, DASHBOARD_CACHE_TTL_SECONDS, payload);
   res.json(payload);
+});
+
+// ─── KPIs EXTENDIDOS ─────────────────────────────────────────────────────────
+
+router.get('/kpis-extendidos', async (req: AuthRequest, res: Response) => {
+  const cacheKey = `dashboard:kpis-extendidos:${toScopeKey(req)}:${JSON.stringify(req.query)}`;
+  const cached = await getCachedJson<unknown>(cacheKey);
+  if (cached) { res.json(cached); return; }
+
+  const scopeFilter = buildDashboardFilter(req);
+
+  const [agg, debtorCount] = await Promise.all([
+    prisma.evaluation.aggregate({
+      where: scopeFilter,
+      _count: { id: true },
+      _avg: { score_total: true },
+      _max: { score_total: true },
+      _min: { score_total: true },
+    }),
+    prisma.debtorAnalysis.count({
+      where: { promesa_de_pago: true, evaluation: { ...scopeFilter, deletedAt: null } },
+    }),
+  ]);
+
+  const payload = {
+    llamadasAuditadas: agg._count.id,
+    scorePromedio: Math.round(Number(agg._avg.score_total ?? 0) * 10) / 10,
+    promesasDePago: debtorCount,
+    mejorScore: Math.round(Number(agg._max.score_total ?? 0) * 10) / 10,
+    peorScore: Math.round(Number(agg._min.score_total ?? 0) * 10) / 10,
+  };
+
+  await setCachedJson(cacheKey, DASHBOARD_CACHE_TTL_SECONDS, payload);
+  res.json(payload);
+});
+
+// ─── FALLAS COMUNES (TOP 8) ───────────────────────────────────────────────────
+
+const CRITERIO_LABELS: Record<string, string> = {
+  bas_identificacion: 'No validó identidad del cliente',
+  bas_informacion: 'No informó cargos/gestiones',
+  herr_ofrece_pex: 'No ofreció alternativas de pago',
+  core_cierre: 'No confirmó promesa de pago',
+  core_apertura: 'No se despidió correctamente',
+  bas_respeto: 'Tono inadecuado',
+  bas_veracidad: 'Información incorrecta',
+  doc_codifica: 'No codificó correctamente',
+  ea_preg_motivo_atraso: 'No preguntó motivo de atraso',
+  res_neg_sentido_urgencia: 'Sin sentido de urgencia',
+  herr_sigue_politicas: 'No sigue políticas',
+  core_control: 'No controló la llamada',
+};
+
+router.get('/fallas-comunes', async (req: AuthRequest, res: Response) => {
+  const cacheKey = `dashboard:fallas-comunes:${toScopeKey(req)}:${JSON.stringify(req.query)}`;
+  const cached = await getCachedJson<unknown>(cacheKey);
+  if (cached) { res.json(cached); return; }
+
+  const scopeFilter = buildDashboardFilter(req);
+  const criterioKeys = Object.keys(CRITERIO_LABELS);
+
+  const evs = await prisma.evaluation.findMany({
+    where: scopeFilter,
+    select: Object.fromEntries(criterioKeys.map((k) => [k, true])) as Record<string, true>,
+  });
+
+  const total = evs.length;
+  const fallas = criterioKeys
+    .map((key) => {
+      const applicable = evs.filter((e) => (e as Record<string, string>)[key] !== 'NO_APLICA');
+      const noCumple = applicable.filter((e) => (e as Record<string, string>)[key] === 'NO_CUMPLE').length;
+      return {
+        criterio: key,
+        label: CRITERIO_LABELS[key],
+        cantidad: noCumple,
+        porcentaje: total > 0 ? Math.round((noCumple / total) * 1000) / 10 : 0,
+      };
+    })
+    .filter((f) => f.cantidad > 0)
+    .sort((a, b) => b.cantidad - a.cantidad)
+    .slice(0, 8);
+
+  await setCachedJson(cacheKey, DASHBOARD_CACHE_TTL_SECONDS, fallas);
+  res.json(fallas);
 });
 
 export default router;

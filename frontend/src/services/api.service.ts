@@ -109,6 +109,8 @@ export const dashboardApi = {
     api.get<TrendPoint[]>('/api/v1/dashboard/trends', { params: { days } }),
   kpisExtended: (params?: DashboardFilters) =>
     api.get<DashboardKpisExtended>('/api/v1/dashboard/kpis-extended', { params }),
+  kpisExtendidos: (params?: DashboardFilters) =>
+    api.get<DashboardKpisExtendidos>('/api/v1/dashboard/kpis-extendidos', { params }),
   scorePorCliente: (params?: DashboardFilters) =>
     api.get<ScorePorClienteItem[]>('/api/v1/dashboard/score-por-cliente', { params }),
   rankingGestores: (params?: DashboardFilters) =>
@@ -117,6 +119,8 @@ export const dashboardApi = {
     api.get<FallaTipica[]>('/api/v1/dashboard/fallas-tipicas', { params }),
   fallasCriticas: (params?: DashboardFilters) =>
     api.get<FallaCritica[]>('/api/v1/dashboard/fallas-criticas', { params }),
+  fallasComunes: (params?: DashboardFilters) =>
+    api.get<FallaComun[]>('/api/v1/dashboard/fallas-comunes', { params }),
   scoreCriterios: (params?: DashboardFilters) =>
     api.get<ScoreCriterio[]>('/api/v1/dashboard/score-criterios', { params }),
 };
@@ -445,6 +449,21 @@ export interface FallaTipica {
 export interface FallaCritica {
   name: string;
   value: number;
+}
+
+export interface FallaComun {
+  criterio: string;
+  label: string;
+  cantidad: number;
+  porcentaje: number;
+}
+
+export interface DashboardKpisExtendidos {
+  llamadasAuditadas: number;
+  scorePromedio: number;
+  promesasDePago: number;
+  mejorScore: number;
+  peorScore: number;
 }
 
 export interface ScoreCriterio {
