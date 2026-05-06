@@ -179,6 +179,7 @@ model DebtorAnalysis {
   promesa_de_pago       Boolean           @default(false)
   fecha_promesa         DateTime?
   monto_prometido       Float?
+  monto_adeudado        Float?
   nivel_conflicto       ConflictLevel
   resumen_situacion     String            @db.Text
   ai_raw_response       Json?

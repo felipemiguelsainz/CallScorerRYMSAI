@@ -1,8 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   useEvaluacion,
   useScoreEvaluacion,
+  useRescoreEvaluacion,
   useAnalyzeDebtor,
   useCompleteEvaluacion,
 } from '../hooks/useEvaluation';
@@ -13,7 +14,7 @@ import ScoringTable from '../components/ScoringTable';
 import DebtorAnalysisCard from '../components/DebtorAnalysisCard';
 import PDFExportButton from '../components/PDFExportButton';
 import ScoreDisplay from '../components/ScoreDisplay';
-import { ArrowLeft, Brain, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Brain, CheckCircle, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { evaluacionesApi } from '../services/api.service';
 
@@ -30,11 +31,20 @@ export default function EvaluationDetail() {
     refetchInterval: (q) => (q.state.data?.status === 'processing' ? 2000 : false),
   });
   const { mutate: score, isPending: scoring, isError: scoringError } = useScoreEvaluacion(id!);
+  const { mutate: rescore, isPending: rescoring } = useRescoreEvaluacion(id!);
   const { mutate: analyzeDebtor, isPending: analyzing } = useAnalyzeDebtor(id!);
   const { mutate: complete, isPending: completing } = useCompleteEvaluacion(id!);
 
   const autoScoreTriggeredRef = useRef(false);
   const autoDebtorTriggeredRef = useRef(false);
+  const transcriptCardRef = useRef<HTMLDivElement>(null);
+  const [activeCitation, setActiveCitation] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
+
+  function handleCiteClick(citation: string) {
+    setActiveCitation(citation);
+    transcriptCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   // Poll only while backend is processing audio/transcript.
   const hasAudio = !!evaluation?.audio_path;
@@ -103,6 +113,21 @@ export default function EvaluationDetail() {
         </div>
         <div className="flex gap-2 shrink-0">
           <PDFExportButton evaluacionId={id!} callId={evaluation.call_id} />
+          {hasScoringResult && (
+            <button
+              onClick={() => rescore(undefined)}
+              disabled={rescoring || scoring}
+              className="btn-secondary flex items-center gap-2"
+              title="Volver a evaluar con IA (fuerza nuevo análisis)"
+            >
+              {rescoring ? (
+                <span className="animate-spin h-4 w-4 border-2 border-brand-dark border-t-transparent rounded-full" />
+              ) : (
+                <RefreshCw size={15} />
+              )}
+              {rescoring ? 'Reevaluando...' : 'Reevaluar'}
+            </button>
+          )}
           {isDraft && hasScoringResult && (
             <button
               onClick={() => complete(undefined)}
@@ -172,119 +197,136 @@ export default function EvaluationDetail() {
         </>
       )}
 
-      {/* Flags */}
-      {(evaluation.flag_llamada_cortada ||
-        evaluation.flag_problema_calidad ||
-        evaluation.flag_problema_sonido ||
-        evaluation.flag_sistema_lento ||
-        evaluation.flag_conectividad ||
-        evaluation.flag_empatia_covid) && (
-        <div className="card">
-          <h3 className="font-semibold text-brand-dark mb-3">Flags</h3>
-          <div className="flex flex-wrap gap-2">
-            {evaluation.flag_llamada_cortada && <Flag label="Llamada Cortada" />}
-            {evaluation.flag_problema_calidad && <Flag label="Problema Calidad" />}
-            {evaluation.flag_problema_sonido && <Flag label="Problema Sonido" />}
-            {evaluation.flag_sistema_lento && <Flag label="Sistema Lento" />}
-            {evaluation.flag_conectividad && <Flag label="Conectividad" />}
-            {evaluation.flag_empatia_covid && <Flag label="Empatía COVID" />}
-          </div>
-        </div>
-      )}
+      {/* Más detalles accordion */}
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <button
+          onClick={() => setShowDetails((v) => !v)}
+          className="w-full flex items-center justify-between px-5 py-4 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+        >
+          <span className="font-semibold text-brand-dark">Más detalles</span>
+          {showDetails ? <ChevronUp size={18} className="text-gray-500" /> : <ChevronDown size={18} className="text-gray-500" />}
+        </button>
 
-      {/* Audio Upload */}
-      <div className="card">
-        <h3 className="font-semibold text-brand-dark mb-4">Audio de la Llamada</h3>
-        {hasAudio ? (
-          <div className="flex items-center gap-3 text-sm text-gray-600">
-            <span>
-              ✅ Audio subido: <strong>{evaluation.audio_filename}</strong>
-            </span>
-            {evaluation.audio_duration_s && (
-              <span className="text-gray-400">
-                ({Math.floor(evaluation.audio_duration_s / 60)}:
-                {String(evaluation.audio_duration_s % 60).padStart(2, '0')} min)
-              </span>
-            )}
-          </div>
-        ) : (
-          <AudioUploader evaluacionId={id!} />
-        )}
-      </div>
-
-      {/* Transcript */}
-      {(hasAudio || hasTranscript) && (
-        <div className="card">
-          {processingStatus?.status === 'processing' && (
-            <div className="mb-3 text-sm text-blue-700 bg-blue-50 rounded-lg p-2">
-              Procesando transcripcion... se actualiza automaticamente.
-            </div>
-          )}
-          <TranscriptViewer evaluacionId={id!} transcript={evaluation.transcript} />
-        </div>
-      )}
-
-      {/* AI Actions */}
-      {hasTranscript && (isScoring || (!isScoring && !hasScoringResult && scoringError)) && (
-        <div className="card">
-          <h3 className="font-semibold text-brand-dark mb-4">Proceso de IA</h3>
-          <div className="flex flex-wrap gap-3">
-            {isScoring && (
-              <div className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-blue-50 text-blue-700 text-sm font-medium">
-                <span className="animate-spin h-4 w-4 border-2 border-blue-700 border-t-transparent rounded-full" />
-                Evaluando diálogo con IA...
+        {showDetails && (
+          <div className="p-5 space-y-6 border-t border-gray-200">
+            {/* Flags */}
+            {(evaluation.flag_llamada_cortada ||
+              evaluation.flag_problema_calidad ||
+              evaluation.flag_problema_sonido ||
+              evaluation.flag_sistema_lento ||
+              evaluation.flag_conectividad ||
+              evaluation.flag_empatia_covid) && (
+              <div className="card">
+                <h3 className="font-semibold text-brand-dark mb-3">Flags</h3>
+                <div className="flex flex-wrap gap-2">
+                  {evaluation.flag_llamada_cortada && <Flag label="Llamada Cortada" />}
+                  {evaluation.flag_problema_calidad && <Flag label="Problema Calidad" />}
+                  {evaluation.flag_problema_sonido && <Flag label="Problema Sonido" />}
+                  {evaluation.flag_sistema_lento && <Flag label="Sistema Lento" />}
+                  {evaluation.flag_conectividad && <Flag label="Conectividad" />}
+                  {evaluation.flag_empatia_covid && <Flag label="Empatía COVID" />}
+                </div>
               </div>
             )}
 
-            {!isScoring && !hasScoringResult && scoringError && (
-              <button onClick={() => score(undefined)} className="btn-primary">
-                Reintentar evaluación automática
-              </button>
+            {/* Audio Upload */}
+            <div className="card">
+              <h3 className="font-semibold text-brand-dark mb-4">Audio de la Llamada</h3>
+              {hasAudio ? (
+                <div className="flex items-center gap-3 text-sm text-gray-600">
+                  <span>
+                    ✅ Audio subido: <strong>{evaluation.audio_filename}</strong>
+                  </span>
+                  {evaluation.audio_duration_s && (
+                    <span className="text-gray-400">
+                      ({Math.floor(evaluation.audio_duration_s / 60)}:
+                      {String(evaluation.audio_duration_s % 60).padStart(2, '0')} min)
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <AudioUploader evaluacionId={id!} />
+              )}
+            </div>
+
+            {/* Transcript */}
+            {(hasAudio || hasTranscript) && (
+              <div className="card" ref={transcriptCardRef}>
+                {processingStatus?.status === 'processing' && (
+                  <div className="mb-3 text-sm text-blue-700 bg-blue-50 rounded-lg p-2">
+                    Procesando transcripcion... se actualiza automaticamente.
+                  </div>
+                )}
+                <TranscriptViewer
+                  evaluacionId={id!}
+                  transcript={evaluation.transcript}
+                  highlightCitation={activeCitation}
+                />
+              </div>
+            )}
+
+            {/* AI Actions */}
+            {hasTranscript && (isScoring || (!isScoring && !hasScoringResult && scoringError)) && (
+              <div className="card">
+                <h3 className="font-semibold text-brand-dark mb-4">Proceso de IA</h3>
+                <div className="flex flex-wrap gap-3">
+                  {isScoring && (
+                    <div className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-blue-50 text-blue-700 text-sm font-medium">
+                      <span className="animate-spin h-4 w-4 border-2 border-blue-700 border-t-transparent rounded-full" />
+                      Evaluando diálogo con IA...
+                    </div>
+                  )}
+                  {!isScoring && !hasScoringResult && scoringError && (
+                    <button onClick={() => score(undefined)} className="btn-primary">
+                      Reintentar evaluación automática
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Scoring Table */}
+            {hasScoringResult && (
+              <div>
+                <h2 className="text-lg font-bold text-brand-dark mb-3">Rúbrica de Evaluación</h2>
+                <ScoringTable evaluation={evaluation} onCiteClick={handleCiteClick} />
+              </div>
+            )}
+
+            {/* Debtor Analysis */}
+            {hasScoringResult && (
+              <div className="card">
+                <h3 className="font-semibold text-brand-dark mb-4 flex items-center gap-2">
+                  <Brain size={16} className="text-brand-red" />
+                  Análisis del Deudor
+                </h3>
+                {hasDebtor && evaluation.debtor_analysis ? (
+                  <DebtorAnalysisCard analysis={evaluation.debtor_analysis} />
+                ) : analyzing ? (
+                  <div className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-blue-50 text-blue-700 text-sm font-medium">
+                    <span className="animate-spin h-4 w-4 border-2 border-blue-700 border-t-transparent rounded-full" />
+                    Generando análisis del deudor...
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600">
+                    El análisis del deudor se genera automáticamente al finalizar el scoring.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Observaciones */}
+            {evaluation.observaciones && (
+              <div className="card">
+                <h3 className="font-semibold text-brand-dark mb-2">Observaciones</h3>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                  {DOMPurify.sanitize(evaluation.observaciones, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] })}
+                </p>
+              </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* Scoring Table */}
-      {hasScoringResult && (
-        <div>
-          <h2 className="text-lg font-bold text-brand-dark mb-3">Rúbrica de Evaluación</h2>
-          <ScoringTable evaluation={evaluation} />
-        </div>
-      )}
-
-      {/* Debtor Analysis */}
-      {hasScoringResult && (
-        <div className="card">
-          <h3 className="font-semibold text-brand-dark mb-4 flex items-center gap-2">
-            <Brain size={16} className="text-brand-red" />
-            Análisis del Deudor
-          </h3>
-
-          {hasDebtor && evaluation.debtor_analysis ? (
-            <DebtorAnalysisCard analysis={evaluation.debtor_analysis} />
-          ) : analyzing ? (
-            <div className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-blue-50 text-blue-700 text-sm font-medium">
-              <span className="animate-spin h-4 w-4 border-2 border-blue-700 border-t-transparent rounded-full" />
-              Generando análisis del deudor...
-            </div>
-          ) : (
-            <p className="text-sm text-gray-600">
-              El análisis del deudor se genera automáticamente al finalizar el scoring.
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Observaciones */}
-      {evaluation.observaciones && (
-        <div className="card">
-          <h3 className="font-semibold text-brand-dark mb-2">Observaciones</h3>
-          <p className="text-sm text-gray-700 whitespace-pre-wrap">
-            {DOMPurify.sanitize(evaluation.observaciones, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] })}
-          </p>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

@@ -2,6 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes fallasFadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fallasBarExpand {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+.fallas-legend-item {
+  opacity: 0;
+  animation: fallasFadeUp 0.45s ease-out forwards;
+}
+
+.fallas-bar {
+  transform-origin: left;
+  transform: scaleX(0);
+  animation: fallasBarExpand 0.7s cubic-bezier(0.2, 0, 0.38, 0.9) forwards;
+}
+
+@keyframes transcriptHighlight {
+  0%   { background-color: #fef08a; box-shadow: 0 0 0 2px #facc15; }
+  60%  { background-color: #fef9c3; box-shadow: 0 0 0 2px #fde047; }
+  100% { background-color: transparent; box-shadow: none; }
+}
+.transcript-line-highlight {
+  animation: transcriptHighlight 2.8s ease-out forwards;
+}
+
 @layer base {
   * {
     box-sizing: border-box;

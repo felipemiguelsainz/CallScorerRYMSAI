@@ -25,11 +25,13 @@ import {
   ResponsiveContainer,
   Tooltip,
   CartesianGrid,
-  Legend,
   LineChart,
   Line,
   XAxis,
   YAxis,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts';
 
 // ─── CONSTANTES ───────────────────────────────────────────────────────────────
@@ -82,8 +84,8 @@ export default function Dashboard() {
   });
 
   const { data: trends, isLoading: trendsLoading } = useQuery({
-    queryKey: ['dashboard-trends', filters],
-    queryFn: () => dashboardApi.trends(30).then((r) => r.data),
+    queryKey: ['dashboard-trends', filters, 90],
+    queryFn: () => dashboardApi.trends(90, filters).then((r) => r.data),
   });
 
   const { data: rankingGestores } = useQuery({
@@ -92,11 +94,13 @@ export default function Dashboard() {
     enabled: canSeeExtended,
   });
 
-  const { data: fallasComunes } = useQuery({
+  const { data: fallasComunesData } = useQuery({
     queryKey: ['dashboard-fallas-comunes', filters],
     queryFn: () => dashboardApi.fallasComunes(filters).then((r) => r.data),
     enabled: canSeeExtended,
   });
+  const fallasComunes = fallasComunesData?.fallas ?? [];
+  const totalFallos = fallasComunesData?.totalFallos ?? 0;
 
   const { data: recientes, isLoading: recientesLoading } = useQuery({
     queryKey: ['evaluaciones-recientes', filters],
@@ -117,9 +121,6 @@ export default function Dashboard() {
     queryFn: () => clientesApi.list({ isActive: true }).then((r) => r.data),
     enabled: canSeeExtended,
   });
-
-  // ── Fallas: calcular máximo para normalizar barras ─────────────────────────
-  const maxFalla = fallasComunes && fallasComunes.length > 0 ? fallasComunes[0].cantidad : 1;
 
   return (
     <div className="space-y-6">
@@ -173,6 +174,11 @@ export default function Dashboard() {
             <div className="text-green-600 mb-1"><TrendingUp size={20} /></div>
             <p className="text-3xl font-bold text-brand-dark">{kpisExt.mejorScore.toFixed(1)}%</p>
             <p className="text-xs text-gray-500 mt-0.5">Mejor score del período</p>
+            {kpisExt.gestorMejorScore && (
+              <p className="text-xs text-green-600 font-medium mt-1 truncate" title={kpisExt.gestorMejorScore}>
+                {kpisExt.gestorMejorScore}
+              </p>
+            )}
           </div>
         </div>
       ) : null}
@@ -183,7 +189,7 @@ export default function Dashboard() {
         <div className="card lg:col-span-2">
           <h3 className="font-semibold text-brand-dark mb-4 flex items-center gap-2">
             <TrendingUp size={16} className="text-brand-red" />
-            Evolución de Scores (últimos 30 días)
+            Evolución de Scores (últimos 90 días)
           </h3>
           {trendsLoading ? (
             <div className="h-48 bg-gray-100 animate-pulse rounded-lg" />
@@ -194,10 +200,7 @@ export default function Dashboard() {
                 <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                 <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
                 <Tooltip formatter={(v: number | string) => `${Number(v).toFixed(1)}%`} />
-                <Legend />
-                <Line type="monotone" dataKey="avgTotal" name="Total" stroke={BRAND_RED} strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="avgCore" name="Core" stroke="#2563eb" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="avgBasics" name="Basics" stroke="#16a34a" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="avgTotal" name="Score Total" stroke={BRAND_RED} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -211,10 +214,20 @@ export default function Dashboard() {
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Mejor score</p>
               <p className="text-3xl font-bold text-green-600 mt-1">{kpisExt.mejorScore.toFixed(1)}%</p>
+              {kpisExt.gestorMejorScore && (
+                <p className="text-xs text-gray-400 mt-0.5 truncate" title={kpisExt.gestorMejorScore}>
+                  {kpisExt.gestorMejorScore}
+                </p>
+              )}
             </div>
             <div className="border-t border-gray-100 pt-4">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Peor score</p>
               <p className="text-3xl font-bold text-red-600 mt-1">{kpisExt.peorScore.toFixed(1)}%</p>
+              {kpisExt.gestorPeorScore && (
+                <p className="text-xs text-gray-400 mt-0.5 truncate" title={kpisExt.gestorPeorScore}>
+                  {kpisExt.gestorPeorScore}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -243,28 +256,12 @@ export default function Dashboard() {
       {/* ── FALLAS MÁS COMUNES ──────────────────────────────────────────── */}
       {canSeeExtended && fallasComunes && fallasComunes.length > 0 && (
         <div className="card">
-          <h3 className="font-semibold text-brand-dark mb-5 flex items-center gap-2">
+          <h3 className="font-semibold text-brand-dark mb-1 flex items-center gap-2">
             <AlertTriangle size={16} className="text-brand-red" />
-            Fallas más Comunes
+            Fallas más Frecuentes
           </h3>
-          <div className="space-y-3">
-            {fallasComunes.map((f) => (
-              <div key={f.criterio} className="flex items-center gap-3">
-                <p className="text-sm text-gray-700 w-64 shrink-0 truncate" title={f.label}>
-                  {f.label}
-                </p>
-                <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-brand-red transition-all"
-                    style={{ width: `${(f.cantidad / maxFalla) * 100}%` }}
-                  />
-                </div>
-                <span className="text-xs font-semibold text-gray-500 w-16 text-right shrink-0">
-                  {f.cantidad} ({f.porcentaje.toFixed(1)}%)
-                </span>
-              </div>
-            ))}
-          </div>
+          <p className="text-xs text-gray-400 mb-6">Distribución de fallos por criterio</p>
+          <FallasPieChart data={fallasComunes} totalFallos={totalFallos} />
         </div>
       )}
 
@@ -281,6 +278,8 @@ export default function Dashboard() {
                   <th className="pb-2 pr-4">Call ID</th>
                   <th className="pb-2 pr-4">Gestor</th>
                   {!isGestor && <th className="pb-2 pr-4">Cliente</th>}
+                  <th className="pb-2 pr-4">Conflicto</th>
+                  <th className="pb-2 pr-4">Monto</th>
                   <th className="pb-2 pr-4">Score</th>
                   <th className="pb-2 pr-4">Estado</th>
                   <th className="pb-2">Fecha</th>
@@ -300,6 +299,14 @@ export default function Dashboard() {
                         {ev.cliente ? `${ev.cliente.icono ?? ''} ${ev.cliente.nombre}` : '—'}
                       </td>
                     )}
+                    <td className="py-2 pr-4">
+                      <ConflictBadge level={ev.debtor_analysis?.nivel_conflicto} />
+                    </td>
+                    <td className="py-2 pr-4 text-gray-700 tabular-nums text-xs">
+                      {ev.debtor_analysis?.monto_adeudado != null
+                        ? `$${ev.debtor_analysis.monto_adeudado.toLocaleString('es-AR')}`
+                        : <span className="text-gray-300">—</span>}
+                    </td>
                     <td className="py-2 pr-4">
                       <ScoreDisplay score={ev.score_total} />
                     </td>
@@ -400,26 +407,151 @@ function RankingTable({
   }
 
   const MEDALS = ['🥇', '🥈', '🥉', '4°', '5°'];
+  const maxScore = Math.max(...items.map((i) => i.score), 1);
 
   return (
-    <div className="space-y-2">
-      {items.map((item, i) => (
-        <div key={item.gestorId} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
-          <span className="text-sm w-7 shrink-0 text-center">{MEDALS[i] ?? `${i + 1}°`}</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{item.nombre}</p>
-            <p className="text-xs text-gray-400">{item.llamadas} llamadas</p>
+    <div className="space-y-3">
+      {items.map((item, i) => {
+        const barColor =
+          item.score >= 80 ? 'bg-green-400' :
+          item.score >= 60 ? 'bg-yellow-400' :
+          'bg-red-400';
+        return (
+          <div key={item.gestorId} className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm w-7 shrink-0 text-center">{MEDALS[i] ?? `${i + 1}°`}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate leading-tight">{item.nombre}</p>
+                <p className="text-xs text-gray-400">{item.llamadas} llamadas</p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className={`text-sm font-bold ${variant === 'mejores' ? 'text-green-600' : 'text-red-600'}`}>
+                  {item.score.toFixed(1)}%
+                </p>
+                <span className={`text-xs font-semibold ${item.tendencia === 'up' ? 'text-green-500' : 'text-red-400'}`}>
+                  {item.tendencia === 'up' ? '↑' : '↓'}
+                </span>
+              </div>
+            </div>
+            <div className="ml-9 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${barColor}`}
+                style={{ width: `${(item.score / maxScore) * 100}%` }}
+              />
+            </div>
           </div>
-          <div className="text-right shrink-0">
-            <p className={`text-sm font-bold ${variant === 'mejores' ? 'text-green-600' : 'text-red-600'}`}>
-              {item.score.toFixed(1)}%
-            </p>
-            <span className={`text-xs font-semibold ${item.tendencia === 'up' ? 'text-green-500' : 'text-red-400'}`}>
-              {item.tendencia === 'up' ? '↑' : '↓'}
-            </span>
-          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── FALLAS PIE CHART ─────────────────────────────────────────────────────────
+const FALLAS_COLORS = ['#C0403D', '#D4724A', '#C49A3C', '#4E7FAF', '#7B68AE'];
+
+function FallasPieChart({
+  data,
+  totalFallos,
+}: {
+  data: Array<{ criterio: string; label: string; cantidad: number }>;
+  totalFallos: number;
+}) {
+  const total = totalFallos > 0 ? totalFallos : data.reduce((s, d) => s + d.cantidad, 0);
+  const pieData = data.map((f) => ({
+    name: f.label,
+    value: f.cantidad,
+    pct: total > 0 ? Math.round((f.cantidad / total) * 1000) / 10 : 0,
+  }));
+
+  const maxValue = Math.max(...pieData.map((d) => d.value), 1);
+
+  return (
+    <div className="flex flex-col sm:flex-row gap-8 items-center w-full">
+      {/* Donut */}
+      <div className="relative shrink-0" style={{ width: 220, height: 220 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={pieData}
+              cx="50%"
+              cy="50%"
+              innerRadius={72}
+              outerRadius={100}
+              paddingAngle={3}
+              dataKey="value"
+              animationBegin={0}
+              animationDuration={900}
+            >
+              {pieData.map((_, index) => (
+                <Cell key={index} fill={FALLAS_COLORS[index % FALLAS_COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip
+              formatter={(_value, _name, props) => {
+                const item = props.payload as { name: string; pct: number; value: number };
+                return [`${item.pct.toFixed(1)}% · ${item.value} fallos`, item.name];
+              }}
+              contentStyle={{
+                fontSize: '12px',
+                borderRadius: '8px',
+                border: '1px solid #e5e7eb',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+        {/* Etiqueta central */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <span className="text-4xl font-bold text-brand-dark leading-none">{total}</span>
+          <span className="text-[11px] text-gray-400 mt-1.5 text-center leading-tight">
+            fallos<br />totales
+          </span>
         </div>
-      ))}
+      </div>
+
+      {/* Leyenda custom */}
+      <div className="flex-1 w-full space-y-4">
+        {pieData.map((d, i) => (
+          <div
+            key={i}
+            className="fallas-legend-item"
+            style={{ animationDelay: `${i * 90}ms` }}
+          >
+            <div className="flex items-center gap-2 mb-1.5">
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: FALLAS_COLORS[i % FALLAS_COLORS.length] }}
+              />
+              <span className="text-xs text-gray-600 flex-1 leading-snug">{d.name}</span>
+              <span
+                className="text-xs font-bold tabular-nums shrink-0"
+                style={{ color: FALLAS_COLORS[i % FALLAS_COLORS.length] }}
+              >
+                {d.pct.toFixed(1)}%
+              </span>
+            </div>
+            {/* Mini progress bar */}
+            <div
+              className="h-1.5 rounded-full overflow-hidden ml-[18px]"
+              style={{ backgroundColor: `${FALLAS_COLORS[i % FALLAS_COLORS.length]}22` }}
+            >
+              <div
+                className="fallas-bar h-full rounded-full"
+                style={{
+                  width: `${(d.value / maxValue) * 100}%`,
+                  backgroundColor: FALLAS_COLORS[i % FALLAS_COLORS.length],
+                  animationDelay: `${i * 90 + 380}ms`,
+                }}
+              />
+            </div>
+          </div>
+        ))}
+        {total > 0 && (
+          <p className="text-[10px] text-gray-400 pt-2.5 border-t border-gray-100">
+            {total} fallos contabilizados en el período seleccionado
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -439,6 +571,22 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${map[status] ?? 'bg-gray-100 text-gray-600'}`}>
       {labels[status] ?? status}
+    </span>
+  );
+}
+
+// ─── CONFLICT BADGE ───────────────────────────────────────────────────────────
+function ConflictBadge({ level }: { level?: string | null }) {
+  if (!level) return <span className="text-gray-300 text-xs">—</span>;
+  const map: Record<string, { cls: string; label: string }> = {
+    BAJO:  { cls: 'bg-green-100 text-green-700',  label: 'Bajo' },
+    MEDIO: { cls: 'bg-yellow-100 text-yellow-700', label: 'Medio' },
+    ALTO:  { cls: 'bg-red-100 text-red-700',       label: 'Alto' },
+  };
+  const { cls, label } = map[level] ?? { cls: 'bg-gray-100 text-gray-500', label: level };
+  return (
+    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${cls}`}>
+      {label}
     </span>
   );
 }

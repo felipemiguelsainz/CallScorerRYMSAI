@@ -30,7 +30,7 @@ const worker = new Worker(
       },
     });
   },
-  { connection: { url: env.REDIS_URL } },
+  { connection: { url: env.REDIS_URL }, concurrency: 2 },
 );
 
 worker.on('completed', (job) => {

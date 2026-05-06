@@ -10,7 +10,7 @@ dotenv.config();
 
 import authRoutes from './routes/auth.routes';
 import gestoresRoutes from './routes/gestores.routes';
-import evaluacionesRoutes from './routes/evaluaciones.routes';
+import evaluacionesRoutes, { batchRescoreRouter } from './routes/evaluaciones.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import adminRoutes from './routes/admin.routes';
 import clientesRoutes from './routes/clientes.routes';
@@ -47,6 +47,7 @@ app.use('/api/v1/gestores', gestoresRoutes);
 app.use('/api/v1/evaluaciones', evaluacionesRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/admin', batchRescoreRouter);
 app.use('/api/v1/clientes', clientesRoutes);
 
 // Health check

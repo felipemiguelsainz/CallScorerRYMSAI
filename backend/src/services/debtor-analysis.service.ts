@@ -26,6 +26,7 @@ export interface DebtorAnalysisData {
   promesa_de_pago: boolean;
   fecha_promesa: Date | null;
   monto_prometido: number | null;
+  monto_adeudado: number | null;
   nivel_conflicto: ConflictLevel;
   resumen_situacion: string;
 }
@@ -181,6 +182,7 @@ export function normalizeDebtorAnalysisPayload(
         ? new Date(parsed.fecha_promesa)
         : null,
     monto_prometido: typeof parsed.monto_prometido === 'number' ? parsed.monto_prometido : null,
+    monto_adeudado: typeof parsed.monto_adeudado === 'number' ? parsed.monto_adeudado : null,
     nivel_conflicto: VALID_CONFLICT_LEVELS.includes(parsed.nivel_conflicto as ConflictLevel)
       ? (parsed.nivel_conflicto as ConflictLevel)
       : 'MEDIO',
@@ -213,7 +215,8 @@ Debes devolver un JSON con exactamente estas claves:
   "justificacion_detalle": "texto literal o paráfrasis de lo que dijo el deudor para justificar",
   "promesa_de_pago": true o false,
   "fecha_promesa": "YYYY-MM-DD" o null si no hay promesa,
-  "monto_prometido": número o null si no se mencionó monto,
+  "monto_prometido": número o null si no se mencionó monto prometido,
+  "monto_adeudado": número aproximado del TOTAL de la deuda mencionada en la llamada (si se mencionan múltiples deudas o conceptos, sumar todos los montos), o null si no se menciona ningún monto,
   "nivel_conflicto": BAJO | MEDIO | ALTO (según el tono y actitud del deudor),
   "resumen_situacion": "resumen en 2-3 oraciones de la situación del deudor",
   "deudor_nombre": "nombre completo del deudor mencionado en la llamada, o null si no se identifica",
@@ -239,7 +242,7 @@ const VALID_CONFLICT_LEVELS: ConflictLevel[] = ['BAJO', 'MEDIO', 'ALTO'];
 
 export async function analyzeDebtor(transcript: string): Promise<DebtorAnalysisResult> {
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: 'gpt-4.1',
     messages: [
       { role: 'system', content: DEBTOR_PROMPT },
       { role: 'user', content: `TRANSCRIPCIÓN:\n\n${transcript}` },

@@ -41,9 +41,18 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   const body = createClienteSchema.parse(req.body);
 
-  const existing = await prisma.cliente.findFirst({ where: { codigo: body.codigo, deletedAt: null } });
-  if (existing) {
+  const existing = await prisma.cliente.findFirst({ where: { codigo: body.codigo } });
+  if (existing && !existing.deletedAt) {
     res.status(409).json({ error: `Ya existe un cliente con el código ${body.codigo}` });
+    return;
+  }
+
+  if (existing && existing.deletedAt) {
+    const cliente = await prisma.cliente.update({
+      where: { id: existing.id },
+      data: { ...body, deletedAt: null },
+    });
+    res.status(201).json(cliente);
     return;
   }
 

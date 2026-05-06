@@ -16,6 +16,7 @@ import * as pdfService from '../services/pdf.service';
 import { sanitizeObjectStrings } from '../lib/sanitize';
 import { storageProvider } from '../modules/storage/local-storage-provider';
 import { enqueueAudioProcessingJob } from '../modules/audio-processing/queue';
+import { logger } from '../lib/logger';
 
 const router = Router();
 router.use(authMiddleware);
@@ -59,6 +60,7 @@ const SCORE_FIELD_KEYS = [
 
 const createEvaluacionSchema = z.object({
   gestorId: z.string().uuid(),
+  clienteId: z.string().uuid().optional(),
   account_number: z.string().max(50).optional(),
   assignment_number: z.string().max(50).optional(),
   contact_type: z.enum(['TITULAR', 'TERCERO', 'NO_CONTACTO']).optional(),
@@ -140,6 +142,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
           justificacion_tipo: true,
           promesa_de_pago: true,
           nivel_conflicto: true,
+          monto_adeudado: true,
         },
       },
     },
@@ -185,6 +188,7 @@ router.post(
         contact_type: body.contact_type ?? 'NO_CONTACTO',
         assignment_date: body.assignment_date ? new Date(body.assignment_date) : new Date(),
         gestorId: body.gestorId,
+        ...(body.clienteId ? { clienteId: body.clienteId } : {}),
         auditorId: req.user!.userId,
         audio_filename: '',
         audio_path: '',
@@ -297,6 +301,7 @@ router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res: Respon
 
 router.post(
   '/:id/upload-audio',
+  requireRole('AUDITOR', 'SUPERVISOR', 'ADMIN'),
   uploadAudioLimiter,
   upload.single('audio'),
   async (req: AuthRequest, res: Response) => {
@@ -377,9 +382,12 @@ router.post(
       return;
     }
 
+    const force = req.query.force === 'true';
+
     // Same audio => same score. Reuse reduces AI cost and keeps consistency across duplicates.
+    // Skip reuse when force=true (e.g. after a scoring prompt update).
     const audioSha256 = existing.audio_path ? await hashFileSha256(existing.audio_path) : null;
-    if (audioSha256) {
+    if (audioSha256 && !force) {
       const reusableCandidates = await prisma.evaluation.findMany({
         where: {
           id: { not: req.params.id },
@@ -597,3 +605,50 @@ async function hashFileSha256(filePath: string): Promise<string | null> {
 }
 
 export default router;
+
+// ─── BATCH RESCORE ────────────────────────────────────────────────────────────
+// Exported separately so it can be mounted at a different path if needed.
+export const batchRescoreRouter = Router();
+batchRescoreRouter.use(authMiddleware);
+
+batchRescoreRouter.post(
+  '/rescore-all',
+  requireRole('ADMIN', 'SUPERVISOR'),
+  async (req: AuthRequest, res: Response) => {
+    // Respond immediately; re-score runs in background.
+    const evaluaciones = await prisma.evaluation.findMany({
+      where: { deletedAt: null, transcript: { not: null } },
+      select: { id: true, transcript: true, audio_path: true },
+    });
+
+    res.json({ message: `Reevaluando ${evaluaciones.length} evaluaciones en segundo plano.`, total: evaluaciones.length });
+
+    // Fire-and-forget: re-score each evaluation sequentially to avoid hammering OpenAI.
+    (async () => {
+      let done = 0;
+      for (const ev of evaluaciones) {
+        try {
+          const { scores, raw } = await scoringService.scoreWithGPT(ev.transcript!);
+          const { score_core, score_basics, score_total, breakdown } = scoringService.calculateScores(scores);
+          const audioSha256 = ev.audio_path ? await hashFileSha256(ev.audio_path) : null;
+          const persistedRaw = {
+            ...raw,
+            ...(audioSha256 ? { audio_sha256: audioSha256 } : {}),
+            calculation: {
+              formula: 'score_total = core * 0.50 + basics * 0.35 + other * 0.15; cada bloque se calcula sobre criterios aplicables.',
+              breakdown,
+            },
+          };
+          await prisma.evaluation.update({
+            where: { id: ev.id },
+            data: { ...scores, score_core, score_basics, score_total, ai_scoring_raw: JSON.parse(JSON.stringify(persistedRaw)) },
+          });
+          done++;
+        } catch (err) {
+          logger.error({ evaluationId: ev.id, err }, '[batch-rescore] Error en evaluación');
+        }
+      }
+      logger.info({ done, total: evaluaciones.length }, '[batch-rescore] Completado');
+    })().catch(console.error);
+  },
+);

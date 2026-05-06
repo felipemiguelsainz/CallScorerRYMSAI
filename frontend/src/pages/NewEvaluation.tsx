@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
 import { Music2, Search, X } from 'lucide-react';
-import { evaluacionesApi, gestoresApi, Gestor } from '../services/api.service';
+import { evaluacionesApi, gestoresApi, clientesApi, Gestor } from '../services/api.service';
 
 export default function NewEvaluation() {
   const navigate = useNavigate();
   const [gestorId, setGestorId] = useState('');
+  const [clienteId, setClienteId] = useState('');
   const [query, setQuery] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -18,6 +19,12 @@ export default function NewEvaluation() {
     queryKey: ['gestores-select', 'GESTOR'],
     queryFn: () => gestoresApi.list({ role: 'GESTOR' }).then((r) => r.data),
   });
+
+  const { data: clientesData } = useQuery({
+    queryKey: ['clientes-select'],
+    queryFn: () => clientesApi.list({ isActive: true }).then((r) => r.data),
+  });
+  const clientes = clientesData?.data ?? [];
 
   const filteredGestores = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -51,7 +58,10 @@ export default function NewEvaluation() {
 
     setSubmitting(true);
     try {
-      const createRes = await evaluacionesApi.create({ gestorId });
+      const createRes = await evaluacionesApi.create({
+        gestorId,
+        ...(clienteId ? { clienteId } : {}),
+      });
       const evaluationId = createRes.data.id;
 
       await evaluacionesApi.uploadAudio(evaluationId, file, (progress) =>
@@ -90,6 +100,20 @@ export default function NewEvaluation() {
             ))}
           </select>
         </div>
+
+        {clientes.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Cliente</label>
+            <select value={clienteId} onChange={(e) => setClienteId(e.target.value)} className="input">
+              <option value="">Sin cliente asignado</option>
+              {clientes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.icono ? `${c.icono} ` : ''}{c.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">

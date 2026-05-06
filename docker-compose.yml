@@ -37,7 +37,7 @@ services:
     ports:
       - "3001:3001"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/callscorerrymsai_db
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-callscorerrymsai_db}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
       JWT_ACCESS_EXPIRES_IN: 15m
@@ -62,7 +62,7 @@ services:
     container_name: callscorerrymsai_worker
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/callscorerrymsai_db
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-callscorerrymsai_db}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
       JWT_ACCESS_EXPIRES_IN: 15m
@@ -73,7 +73,7 @@ services:
       NODE_ENV: production
     volumes:
       - uploads_data:/app/secure-uploads
-    command: ["npm", "run", "worker"]
+    command: ["node", "dist/worker.js"]
     depends_on:
       postgres:
         condition: service_healthy

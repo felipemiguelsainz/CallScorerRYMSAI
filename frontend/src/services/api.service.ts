@@ -92,6 +92,8 @@ export const evaluacionesApi = {
     api.get<{ status: 'processing' | 'ready' | 'error' }>(`/api/v1/evaluaciones/${id}/status`),
   score: (id: string) =>
     api.post<{ message: string; evaluacion: Evaluation }>(`/api/v1/evaluaciones/${id}/score`),
+  rescore: (id: string) =>
+    api.post<{ message: string; evaluacion: Evaluation }>(`/api/v1/evaluaciones/${id}/score?force=true`),
   analyzeDebtor: (id: string) =>
     api.post<{ message: string; evaluacion: Evaluation }>(
       `/api/v1/evaluaciones/${id}/analyze-debtor`,
@@ -105,8 +107,8 @@ export const evaluacionesApi = {
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 export const dashboardApi = {
   kpis: (params?: DashboardFilters) => api.get<DashboardKpis>('/api/v1/dashboard/kpis', { params }),
-  trends: (days?: number) =>
-    api.get<TrendPoint[]>('/api/v1/dashboard/trends', { params: { days } }),
+  trends: (days?: number, params?: DashboardFilters) =>
+    api.get<TrendPoint[]>('/api/v1/dashboard/trends', { params: { days, ...params } }),
   kpisExtended: (params?: DashboardFilters) =>
     api.get<DashboardKpisExtended>('/api/v1/dashboard/kpis-extended', { params }),
   kpisExtendidos: (params?: DashboardFilters) =>
@@ -120,7 +122,7 @@ export const dashboardApi = {
   fallasCriticas: (params?: DashboardFilters) =>
     api.get<FallaCritica[]>('/api/v1/dashboard/fallas-criticas', { params }),
   fallasComunes: (params?: DashboardFilters) =>
-    api.get<FallaComun[]>('/api/v1/dashboard/fallas-comunes', { params }),
+    api.get<FallasComunesResponse>('/api/v1/dashboard/fallas-comunes', { params }),
   scoreCriterios: (params?: DashboardFilters) =>
     api.get<ScoreCriterio[]>('/api/v1/dashboard/score-criterios', { params }),
 };
@@ -262,6 +264,7 @@ export interface DebtorAnalysis {
   promesa_de_pago: boolean;
   fecha_promesa: string | null;
   monto_prometido: number | null;
+  monto_adeudado: number | null;
   nivel_conflicto: ConflictLevel;
   resumen_situacion: string;
   ai_raw_response?: {
@@ -336,6 +339,7 @@ export interface NewEvaluacionData {
   contact_type?: ContactType;
   assignment_date?: string;
   gestorId: string;
+  clienteId?: string;
 }
 
 export interface EvaluacionesFilters {
@@ -454,7 +458,9 @@ export interface FallaCritica {
 export interface FallaComun {
   criterio: string;
   label: string;
+  categoria: 'CORE' | 'BASICS' | 'RESTO';
   cantidad: number;
+  aplicable: number;
   porcentaje: number;
 }
 
@@ -464,6 +470,13 @@ export interface DashboardKpisExtendidos {
   promesasDePago: number;
   mejorScore: number;
   peorScore: number;
+  gestorMejorScore: string | null;
+  gestorPeorScore: string | null;
+}
+
+export interface FallasComunesResponse {
+  fallas: FallaComun[];
+  totalFallos: number;
 }
 
 export interface ScoreCriterio {

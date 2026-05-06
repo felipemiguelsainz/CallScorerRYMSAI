@@ -504,7 +504,7 @@ router.get('/kpis-extendidos', async (req: AuthRequest, res: Response) => {
 
   const scopeFilter = buildDashboardFilter(req);
 
-  const [agg, debtorCount] = await Promise.all([
+  const [agg, debtorCount, bestEv, worstEv] = await Promise.all([
     prisma.evaluation.aggregate({
       where: scopeFilter,
       _count: { id: true },
@@ -515,36 +515,64 @@ router.get('/kpis-extendidos', async (req: AuthRequest, res: Response) => {
     prisma.debtorAnalysis.count({
       where: { promesa_de_pago: true, evaluation: { ...scopeFilter, deletedAt: null } },
     }),
+    prisma.evaluation.findFirst({
+      where: { ...scopeFilter, score_total: { gt: 0 } },
+      orderBy: { score_total: 'desc' },
+      select: { score_total: true, gestor: { select: { name: true } } },
+    }),
+    prisma.evaluation.findFirst({
+      where: { ...scopeFilter, score_total: { gt: 0 } },
+      orderBy: { score_total: 'asc' },
+      select: { score_total: true, gestor: { select: { name: true } } },
+    }),
   ]);
 
   const payload = {
     llamadasAuditadas: agg._count.id,
     scorePromedio: Math.round(Number(agg._avg.score_total ?? 0) * 10) / 10,
     promesasDePago: debtorCount,
-    mejorScore: Math.round(Number(agg._max.score_total ?? 0) * 10) / 10,
-    peorScore: Math.round(Number(agg._min.score_total ?? 0) * 10) / 10,
+    mejorScore: Math.round(Number(bestEv?.score_total ?? 0) * 10) / 10,
+    peorScore: Math.round(Number(worstEv?.score_total ?? 0) * 10) / 10,
+    gestorMejorScore: bestEv?.gestor?.name ?? null,
+    gestorPeorScore: worstEv?.gestor?.name ?? null,
   };
 
   await setCachedJson(cacheKey, DASHBOARD_CACHE_TTL_SECONDS, payload);
   res.json(payload);
 });
 
-// ─── FALLAS COMUNES (TOP 8) ───────────────────────────────────────────────────
+// ─── FALLAS COMUNES (TOP 10 por tasa de falla) ───────────────────────────────
 
-const CRITERIO_LABELS: Record<string, string> = {
-  bas_identificacion: 'No validó identidad del cliente',
-  bas_informacion: 'No informó cargos/gestiones',
-  herr_ofrece_pex: 'No ofreció alternativas de pago',
-  core_cierre: 'No confirmó promesa de pago',
-  core_apertura: 'No se despidió correctamente',
-  bas_respeto: 'Tono inadecuado',
-  bas_veracidad: 'Información incorrecta',
-  doc_codifica: 'No codificó correctamente',
-  ea_preg_motivo_atraso: 'No preguntó motivo de atraso',
-  res_neg_sentido_urgencia: 'Sin sentido de urgencia',
-  herr_sigue_politicas: 'No sigue políticas',
-  core_control: 'No controló la llamada',
+type CriterioCategoria = 'CORE' | 'BASICS' | 'RESTO';
+
+const CRITERIO_META: Record<string, { label: string; categoria: CriterioCategoria }> = {
+  // CORE (peso 50%) — mayor impacto en score
+  core_apertura:               { label: 'No realizó apertura correcta',             categoria: 'CORE' },
+  core_control:                { label: 'Perdió el control de la llamada',           categoria: 'CORE' },
+  core_cierre:                 { label: 'No cerró ni confirmó la gestión',           categoria: 'CORE' },
+  // BASICS (peso 35%)
+  bas_identificacion:          { label: 'No validó la identidad del cliente',        categoria: 'BASICS' },
+  bas_informacion:             { label: 'No informó correctamente al cliente',       categoria: 'BASICS' },
+  bas_respeto:                 { label: 'Trato o tono inadecuado',                   categoria: 'BASICS' },
+  bas_veracidad:               { label: 'Brindó información falsa o incorrecta',     categoria: 'BASICS' },
+  // RESTO (peso 15%)
+  ea_preg_motivo_atraso:       { label: 'No preguntó el motivo del atraso',          categoria: 'RESTO' },
+  ea_sondea_capacidad_pago:    { label: 'No sondeó la capacidad de pago',            categoria: 'RESTO' },
+  ea_utiliza_informacion:      { label: 'No utilizó la información del cliente',     categoria: 'RESTO' },
+  res_neg_sentido_urgencia:    { label: 'No generó sentido de urgencia de pago',     categoria: 'RESTO' },
+  res_negociacion_total_rr:    { label: 'No negoció la deuda total',                 categoria: 'RESTO' },
+  res_ofrece_herramienta:      { label: 'No ofreció herramienta de cobranza',        categoria: 'RESTO' },
+  prev_consecuencias_beneficios: { label: 'No mencionó consecuencias/beneficios',   categoria: 'RESTO' },
+  herr_sigue_politicas:        { label: 'No siguió las políticas internas',          categoria: 'RESTO' },
+  herr_explica_ofrecidas:      { label: 'No explicó las herramientas ofrecidas',     categoria: 'RESTO' },
+  herr_ofrece_pex:             { label: 'No ofreció alternativa de pago (PEX)',      categoria: 'RESTO' },
+  doc_codifica:                { label: 'No codificó la gestión correctamente',      categoria: 'RESTO' },
+  doc_gestiones_ant:           { label: 'No revisó gestiones anteriores',            categoria: 'RESTO' },
+  doc_act_demograficos:        { label: 'No actualizó datos demográficos',           categoria: 'RESTO' },
 };
+
+// Require at least this many applicable evaluations to surface a criterion.
+const FALLAS_MIN_APPLICABLE = 3;
 
 router.get('/fallas-comunes', async (req: AuthRequest, res: Response) => {
   const cacheKey = `dashboard:fallas-comunes:${toScopeKey(req)}:${JSON.stringify(req.query)}`;
@@ -552,31 +580,39 @@ router.get('/fallas-comunes', async (req: AuthRequest, res: Response) => {
   if (cached) { res.json(cached); return; }
 
   const scopeFilter = buildDashboardFilter(req);
-  const criterioKeys = Object.keys(CRITERIO_LABELS);
+  const allCriterioKeys = Object.keys(CRITERIO_META);
 
   const evs = await prisma.evaluation.findMany({
     where: scopeFilter,
-    select: Object.fromEntries(criterioKeys.map((k) => [k, true])) as Record<string, true>,
+    select: Object.fromEntries(allCriterioKeys.map((k) => [k, true])) as Record<string, true>,
   });
 
-  const total = evs.length;
-  const fallas = criterioKeys
+  const fallas = allCriterioKeys
     .map((key) => {
       const applicable = evs.filter((e) => (e as Record<string, string>)[key] !== 'NO_APLICA');
+      if (applicable.length < FALLAS_MIN_APPLICABLE) return null;
       const noCumple = applicable.filter((e) => (e as Record<string, string>)[key] === 'NO_CUMPLE').length;
+      if (noCumple === 0) return null;
+      const tasa = Math.round((noCumple / applicable.length) * 1000) / 10;
       return {
         criterio: key,
-        label: CRITERIO_LABELS[key],
+        label: CRITERIO_META[key].label,
+        categoria: CRITERIO_META[key].categoria,
         cantidad: noCumple,
-        porcentaje: total > 0 ? Math.round((noCumple / total) * 1000) / 10 : 0,
+        aplicable: applicable.length,
+        porcentaje: tasa,
       };
     })
-    .filter((f) => f.cantidad > 0)
-    .sort((a, b) => b.cantidad - a.cantidad)
-    .slice(0, 8);
+    .filter((f): f is NonNullable<typeof f> => f !== null)
+    .sort((a, b) => b.porcentaje - a.porcentaje);
 
-  await setCachedJson(cacheKey, DASHBOARD_CACHE_TTL_SECONDS, fallas);
-  res.json(fallas);
+  // Total fallos across ALL criteria (not just top 5) — used by frontend pie chart for correct %
+  const totalFallos = fallas.reduce((sum, f) => sum + f.cantidad, 0);
+
+  const response = { fallas: fallas.slice(0, 5), totalFallos };
+
+  await setCachedJson(cacheKey, DASHBOARD_CACHE_TTL_SECONDS, response);
+  res.json(response);
 });
 
 export default router;

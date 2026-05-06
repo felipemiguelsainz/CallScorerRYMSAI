@@ -4,6 +4,7 @@ import ScoreBadge from './ScoreBadge';
 
 interface Props {
   evaluation: Evaluation;
+  onCiteClick?: (citation: string) => void;
 }
 
 interface ScoringSection {
@@ -72,7 +73,7 @@ const sections: ScoringSection[] = [
   },
 ];
 
-export default function ScoringTable({ evaluation }: Props) {
+export default function ScoringTable({ evaluation, onCiteClick }: Props) {
   const justifications = extractJustifications(evaluation.ai_scoring_raw);
 
   return (
@@ -109,7 +110,10 @@ export default function ScoringTable({ evaluation }: Props) {
                             <summary className="cursor-pointer text-xs text-brand-red hover:underline">
                               Ver justificación
                             </summary>
-                            <JustificationText text={justifications[field] ?? ''} />
+                            <JustificationText
+                              text={justifications[field] ?? ''}
+                              onCiteClick={onCiteClick}
+                            />
                           </details>
                         </td>
                       </tr>
@@ -144,7 +148,13 @@ function extractJustifications(
   return out;
 }
 
-function JustificationText({ text }: { text: string }) {
+function JustificationText({
+  text,
+  onCiteClick,
+}: {
+  text: string;
+  onCiteClick?: (citation: string) => void;
+}) {
   const citationMatch = text.match(/Cita:\s*['\"]?([^'\"]+)['\"]?/i);
   const matchedCitation = citationMatch?.[0];
   const citation = citationMatch?.[1]?.trim();
@@ -154,9 +164,18 @@ function JustificationText({ text }: { text: string }) {
     <div className="mt-1 text-xs leading-relaxed">
       <p className="text-gray-600">{body || text}</p>
       {citation && (
-        <p className="mt-1 inline-block rounded bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700 border border-gray-200">
+        <button
+          onClick={() => onCiteClick?.(citation)}
+          className={`mt-1 inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700 border border-gray-200 text-left ${
+            onCiteClick
+              ? 'hover:bg-yellow-50 hover:border-yellow-300 hover:text-yellow-800 cursor-pointer transition-colors'
+              : 'cursor-default'
+          }`}
+          title={onCiteClick ? 'Ir al diálogo' : undefined}
+        >
+          {onCiteClick && <span className="text-yellow-600">↑</span>}
           Cita: {citation}
-        </p>
+        </button>
       )}
     </div>
   );

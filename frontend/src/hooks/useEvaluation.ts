@@ -53,6 +53,17 @@ export function useScoreEvaluacion(id: string) {
   });
 }
 
+export function useRescoreEvaluacion(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => evaluacionesApi.rescore(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['evaluacion', id] });
+      qc.invalidateQueries({ queryKey: ['evaluaciones'] });
+    },
+  });
+}
+
 export function useAnalyzeDebtor(id: string) {
   const qc = useQueryClient();
   return useMutation({
