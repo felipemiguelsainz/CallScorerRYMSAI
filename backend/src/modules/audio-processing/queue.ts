@@ -5,6 +5,7 @@ import { logger } from '../../lib/logger';
 export interface AudioProcessJob {
   evaluationId: string;
   filePath: string;
+  requeueCount?: number;
 }
 
 let audioProcessingQueue: Queue<AudioProcessJob, unknown, string> | null = null;
@@ -15,10 +16,10 @@ function getQueue() {
     audioProcessingQueue = new Queue<AudioProcessJob, unknown, string>('audio-processing', {
       connection: { url: env.REDIS_URL },
       defaultJobOptions: {
-        attempts: 3,
+        attempts: 5,
         backoff: {
           type: 'exponential',
-          delay: 1000,
+          delay: 15000, // 15s→30s→60s→120s — outlasts OpenAI's 1-min TPM reset window
         },
         removeOnComplete: true,
       },
@@ -32,9 +33,12 @@ function getQueue() {
   return audioProcessingQueue;
 }
 
-export async function enqueueAudioProcessingJob(job: AudioProcessJob): Promise<boolean> {
+export async function enqueueAudioProcessingJob(
+  job: AudioProcessJob,
+  opts?: { delay?: number },
+): Promise<boolean> {
   try {
-    await getQueue().add('process-audio', job);
+    await getQueue().add('process-audio', job, opts);
     return true;
   } catch (error) {
     // Route handlers rely on this boolean to gracefully degrade to pending state.

@@ -33,7 +33,7 @@ export default function NewEvaluation() {
   }, [gestores, query]);
 
   const { getRootProps, getInputProps, isDragActive, fileRejections } = useDropzone({
-    accept: { 'audio/mpeg': ['.mp3'] },
+    accept: { 'audio/*': ['.gsm', '.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.webm', '.flac'] },
     maxSize: 25 * 1024 * 1024,
     multiple: false,
     onDropAccepted: (accepted) => {
@@ -41,7 +41,7 @@ export default function NewEvaluation() {
       setError('');
     },
     onDropRejected: () => {
-      setError('Archivo inv�lido. Solo MP3 de hasta 25MB.');
+      setError('Archivo inválido. Solo audios (GSM, WAV, MP3…) de hasta 25MB.');
     },
   });
 
@@ -52,7 +52,7 @@ export default function NewEvaluation() {
       return;
     }
     if (!file) {
-      setError('Debes adjuntar un archivo MP3.');
+      setError('Debes adjuntar un archivo de audio.');
       return;
     }
 
@@ -133,8 +133,8 @@ export default function NewEvaluation() {
             <Music2 className="mx-auto mb-3 text-gray-500" size={30} />
             {!file && (
               <>
-                <p className="font-medium text-gray-700">Arrastra tu archivo MP3 aca</p>
-                <p className="text-sm text-gray-500">o haz click para seleccionar (maximo 25MB)</p>
+                <p className="font-medium text-gray-700">Arrastra tu audio acá</p>
+                <p className="text-sm text-gray-500">GSM, WAV, MP3 y otros formatos — máximo 25MB</p>
               </>
             )}
             {file && (

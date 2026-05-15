@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:3001',
+  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:3000',
   withCredentials: true,
 });
 
@@ -89,7 +89,9 @@ export const evaluacionesApi = {
     );
   },
   status: (id: string) =>
-    api.get<{ status: 'processing' | 'ready' | 'error' }>(`/api/v1/evaluaciones/${id}/status`),
+    api.get<{ status: 'processing' | 'ready' | 'error'; score_total?: number; nivel_conflicto?: string | null }>(`/api/v1/evaluaciones/${id}/status`),
+  requeue: (id: string) =>
+    api.post<{ message: string }>(`/api/v1/evaluaciones/${id}/requeue`),
   score: (id: string) =>
     api.post<{ message: string; evaluacion: Evaluation }>(`/api/v1/evaluaciones/${id}/score`),
   rescore: (id: string) =>
@@ -102,6 +104,26 @@ export const evaluacionesApi = {
     api.post<{ message: string; evaluacion: Evaluation }>(`/api/v1/evaluaciones/${id}/complete`),
   exportPdf: (id: string) =>
     api.get(`/api/v1/evaluaciones/${id}/export-pdf`, { responseType: 'blob' }),
+  bulkUpload: (
+    gestorId: string,
+    clienteId: string | undefined,
+    files: File[],
+    onProgress?: (pct: number) => void,
+    signal?: AbortSignal,
+  ) => {
+    const formData = new FormData();
+    formData.append('gestorId', gestorId);
+    if (clienteId) formData.append('clienteId', clienteId);
+    files.forEach((f) => formData.append('files', f));
+    return api.post<BulkUploadResponse>('/api/v1/evaluaciones/bulk', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      signal,
+      onUploadProgress: (evt) => {
+        if (!evt.total || !onProgress) return;
+        onProgress(Math.round((evt.loaded / evt.total) * 100));
+      },
+    });
+  },
 };
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
@@ -197,7 +219,7 @@ export interface AdminUserCreateResponse {
   temporaryPassword?: string;
 }
 
-export type AdminUserUpdateInput = Partial<Omit<AdminUserCreateInput, 'email'>>;
+export type AdminUserUpdateInput = Partial<Omit<AdminUserCreateInput, 'email'>> & { name?: string };
 
 export interface Gestor {
   id: string;
@@ -245,11 +267,23 @@ export interface ScoreCalculationBreakdown {
   };
 }
 
+export type CallFlagValue = 'SI' | 'NO_APLICA';
+
+export interface CallFlags {
+  llamada_cortada: CallFlagValue;
+  problema_sonido: CallFlagValue;
+  problema_conectividad: CallFlagValue;
+  problema_calidad_audio: CallFlagValue;
+  sistema_lento: CallFlagValue;
+  empatia_covid: CallFlagValue;
+}
+
 export interface EvaluationAiScoringRaw {
   transcript_used_for_scoring?: string;
   scores?: Record<string, unknown>;
   justifications?: Record<string, unknown>;
   modelOutput?: Record<string, unknown>;
+  flags?: CallFlags;
   calculation?: {
     formula?: string;
     breakdown?: ScoreCalculationBreakdown;
@@ -483,4 +517,15 @@ export interface ScoreCriterio {
   label: string;
   actual: number;
   anterior: number;
+}
+
+export interface BulkUploadResult {
+  call_id: string;
+  id?: string;
+  status: 'queued' | 'skipped' | 'error';
+  reason?: string;
+}
+
+export interface BulkUploadResponse {
+  results: BulkUploadResult[];
 }

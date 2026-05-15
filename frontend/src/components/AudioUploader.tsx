@@ -16,9 +16,10 @@ export default function AudioUploader({ evaluacionId, onSuccess }: Props) {
   const { mutate, isPending, error } = useUploadAudio(evaluacionId);
 
   function handleFile(file: File) {
-    const fileExtension = file.name.split('.').pop()?.toLowerCase();
-    if (fileExtension !== 'mp3' && file.type !== 'audio/mpeg') {
-      setValidationError('Solo se permiten archivos MP3 válidos.');
+    const AUDIO_EXTS = new Set(['.gsm', '.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.webm', '.flac']);
+    const ext = '.' + (file.name.split('.').pop()?.toLowerCase() ?? '');
+    if (!AUDIO_EXTS.has(ext)) {
+      setValidationError('Solo se permiten archivos de audio válidos (GSM, WAV, MP3…).');
       setSelectedFile(null);
       return;
     }
@@ -78,16 +79,16 @@ export default function AudioUploader({ evaluacionId, onSuccess }: Props) {
         <input
           ref={fileRef}
           type="file"
-          accept=".mp3,audio/mpeg"
+          accept=".gsm,.mp3,.wav,.ogg,.m4a,.mp4,.webm,.flac,audio/*"
           className="hidden"
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
         />
         <Upload className="mx-auto mb-3 text-gray-400" size={32} />
         <p className="text-sm text-gray-600">
-          Arrastra el archivo MP3 aquí o{' '}
+          Arrastra el audio aquí o{' '}
           <span className="text-brand-red font-medium">haz click</span>
         </p>
-        <p className="text-xs text-gray-400 mt-1">Solo MP3 — max. 25MB</p>
+        <p className="text-xs text-gray-400 mt-1">GSM, WAV, MP3… — max. 25MB</p>
       </div>
 
       {selectedFile && (

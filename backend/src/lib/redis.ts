@@ -29,6 +29,15 @@ export async function getCachedJson<T>(key: string): Promise<T | null> {
   }
 }
 
+export async function invalidateCachePattern(pattern: string): Promise<void> {
+  try {
+    const keys = await getRedisClient().keys(pattern);
+    if (keys.length > 0) await getRedisClient().del(...keys);
+  } catch (error) {
+    logger.warn({ err: error, pattern }, 'Could not invalidate cache pattern');
+  }
+}
+
 export async function setCachedJson<T>(key: string, ttlSeconds: number, value: T): Promise<void> {
   try {
     await getRedisClient().set(key, JSON.stringify(value), 'EX', ttlSeconds);

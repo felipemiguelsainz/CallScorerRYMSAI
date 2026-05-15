@@ -35,8 +35,18 @@ export interface ScoringFields {
 export interface PreAnalysis {
   call_type: 'TITULAR' | 'TERCERO' | 'NO_CONTACTO' | string;
   call_outcome: string;
-  sufficient_content: boolean;
   notes?: string;
+}
+
+export type FlagValue = 'SI' | 'NO_APLICA';
+
+export interface CallFlags {
+  llamada_cortada: FlagValue;
+  problema_sonido: FlagValue;
+  problema_conectividad: FlagValue;
+  problema_calidad_audio: FlagValue;
+  sistema_lento: FlagValue;
+  empatia_covid: FlagValue;
 }
 
 export interface ScoreBucketBreakdown {
@@ -72,6 +82,7 @@ export interface CalculatedScores {
 export interface ScoreResult {
   scores: ScoringFields;
   pre_analysis?: PreAnalysis;
+  flags: CallFlags;
   raw: Record<string, unknown>;
 }
 
@@ -107,8 +118,13 @@ Analizá la transcripción de una llamada y evaluá los 20 criterios de la rúbr
 La transcripción usa "GESTOR:" para el agente de cobranza y "DEUDOR:" para la persona que atiende.
 Evaluá ÚNICAMENTE las acciones y conductas del GESTOR.
 
+Para cada criterio asigná: CUMPLE / NO_CUMPLE / NO_APLICA.
+Usá NO_APLICA solo cuando el criterio realmente no aplica al contexto de la llamada.
+Hacé el esfuerzo de evaluar con lo que haya en la transcripción: no uses NO_APLICA como excusa
+para no puntuar. Si hay diálogo real, evaluá.
+
 ════════════════════════════════════════════════
-PASO 1 — PRE-ANÁLISIS (OBLIGATORIO, antes de puntuar)
+PASO 1 — PRE-ANÁLISIS (antes de puntuar)
 ════════════════════════════════════════════════
 
 Determiná:
@@ -119,9 +135,6 @@ Determiná:
 
   • call_outcome — una frase breve del resultado
       Ej: "acuerdo de pago parcial para el viernes", "negativa a pagar", "dejó mensaje en buzón"
-
-  • sufficient_content — ¿hay suficiente diálogo para evaluar?
-      false si: duración < 30 segundos, llamada cortada sin gestión, solo saludo sin contenido evaluable
 
 ════════════════════════════════════════════════
 PASO 2 — REGLAS AUTOMÁTICAS POR TIPO DE CONTACTO
@@ -154,130 +167,121 @@ CRITERIOS DE CONDUCTA — evalúan comportamiento sostenido durante toda la llam
   Aplica a: bas_respeto, bas_veracidad, herr_sigue_politicas, core_control, res_neg_sentido_urgencia
 
 ════════════════════════════════════════════════
-PASO 4 — RÚBRICA OFICIAL CON EJEMPLOS
+PASO 4 — RÚBRICA OFICIAL
 ════════════════════════════════════════════════
 
-━━━ ESCUCHA ACTIVA ━━━
+━━━ 1. ESCUCHA ACTIVA ━━━
 
 ea_preg_motivo_atraso [ACCIÓN]
-  El gestor indaga activamente por qué el cliente no pagó en tiempo y forma.
-  CUMPLE: "¿Por qué no pudo regularizar el vencimiento?" / "¿Qué pasó que no llegó a pagar?"
-  NO_CUMPLE: Va directo a cobrar o negociar sin preguntar el motivo del atraso.
+  ¿El agente indagó por qué el cliente no pagó en tiempo y forma?
+  NO_CUMPLE: va directo a cobrar o negociar sin preguntar el motivo del atraso.
 
 ea_sondea_capacidad_pago [ACCIÓN]
-  El gestor explora concretamente qué puede pagar: cuánto, cuándo y cómo.
-  CUMPLE: "¿Cuánto podría destinar esta semana?" / "¿Podría hacer algo hasta el viernes?"
-  NO_CUMPLE: Solo informa el monto adeudado sin explorar la capacidad de pago del cliente.
+  ¿El agente exploró cuánto, cuándo y cómo puede pagar el cliente?
+  NO_CUMPLE: solo informa el monto adeudado sin explorar la capacidad de pago.
 
 ea_utiliza_informacion [ACCIÓN]
-  El gestor usa datos previos del cliente (historial, acuerdos anteriores, perfil) durante la gestión.
-  CUMPLE: "Veo que tenemos un acuerdo de marzo que no se cumplió..." / "Ya hablamos la semana pasada..."
-  NO_CUMPLE: Trata la llamada sin ninguna referencia al historial cuando este debería existir.
+  ¿El agente usó datos previos del cliente (historial, acuerdos, perfil)?
+  NO_CUMPLE: gestiona sin ninguna referencia al historial cuando este debería existir.
 
-━━━ RESOLUCIÓN ━━━
+━━━ 2. RESOLUCIÓN ━━━
 
 res_neg_sentido_urgencia [CONDUCTA]
-  El gestor transmite urgencia en la regularización y negocia con firmeza respetuosa.
-  CUMPLE por defecto. NO_CUMPLE SOLO si: cede completamente sin negociar, muestra total desinterés,
-  o acepta cualquier condición sin insistir mínimamente.
-  CUMPLE: "Necesitamos regularizar esto antes del cierre de mes" / "La deuda sigue generando mora"
-  NO_CUMPLE: "Bueno, llámenos cuando pueda" sin ningún intento de avanzar.
+  ¿El agente transmitió urgencia y negoció con firmeza respetuosa?
+  CUMPLE por defecto. NO_CUMPLE SOLO si cede completamente sin negociar o muestra total desinterés.
 
 res_negociacion_total_rr [ACCIÓN]
-  El gestor intenta negociar el total de la deuda o una refinanciación completa.
-  CUMPLE: Propone plan de cuotas, ofrece quita, negocia refinanciación del monto total.
-  NO_CUMPLE: Solo menciona la deuda o acepta pagos parciales sin intentar la regularización total.
+  ¿El agente intentó negociar el total de la deuda o una refinanciación completa?
+  NO_CUMPLE: solo menciona la deuda o acepta pagos parciales sin intentar la regularización total.
 
 res_ofrece_herramienta [ACCIÓN]
-  El gestor ofrece una herramienta o plan concreto acorde a la situación del cliente.
-  CUMPLE: Ofrece cuotas, descuento por pago único, extensión de plazo, facilidades.
-  NO_CUMPLE: Solo exige el pago sin ofrecer ninguna alternativa, herramienta o plan.
+  ¿La herramienta o plan ofrecido fue acorde a la situación del cliente?
+  NO_CUMPLE: solo exige el pago sin ofrecer ninguna alternativa, herramienta o plan.
 
-━━━ PREVENCIÓN ━━━
+━━━ 3. PREVENCIÓN ━━━
 
 prev_consecuencias_beneficios [ACCIÓN]
-  El gestor informa consecuencias de no pagar (mora, juicio, inhabilitación) y/o beneficios de
-  regularizar (quita, cuotas, descuentos).
-  CUMPLE: "Si no regulariza antes del 15, pasa a estado judicial" / "Pagando hoy tiene 20% de descuento"
-  NO_CUMPLE: Negocia sin mencionar ninguna consecuencia ni beneficio concreto.
+  ¿El agente informó consecuencias de no pagar (mora, juicio, inhabilitación) y/o beneficios
+  de regularizar (quita, cuotas, descuentos)?
+  NO_CUMPLE: negocia sin mencionar ninguna consecuencia ni beneficio concreto.
 
-━━━ ESTRUCTURA — CORE (peso 50%) ━━━
+━━━ 4. ESTRUCTURA — CORE (peso 50%) ━━━
 
 core_apertura [ACCIÓN]
-  El gestor se presenta correctamente: nombre, empresa y motivo de la llamada de forma clara.
-  CUMPLE: "Hola, soy [nombre] de Recuperos y Mandatos, le llamo por una deuda pendiente con [empresa]"
-  NO_CUMPLE: No dice su nombre, no menciona la empresa, o no aclara el motivo de la llamada.
+  ¿El agente se presentó con nombre, empresa y motivo de llamada de forma clara?
+  NO_CUMPLE: no dice su nombre, no menciona la empresa, o no aclara el motivo.
 
 core_control [CONDUCTA]
-  El gestor mantiene el hilo conductor de la llamada sin perder el foco en el objetivo de cobro.
-  CUMPLE por defecto. NO_CUMPLE SOLO si pierde completamente el control de la conversación
-  o es manipulado por el deudor sin recuperar el objetivo principal de la llamada.
+  ¿El agente mantuvo el hilo conductor sin perder el foco del objetivo?
+  CUMPLE por defecto. NO_CUMPLE SOLO si pierde completamente el control de la conversación.
 
 core_cierre [ACCIÓN]
-  El gestor cierra confirmando acuerdos o próximos pasos y se despide correctamente.
-  CUMPLE: "Entonces quedamos en que el viernes deposita $X, ¿correcto? Muy bien, hasta luego."
-  NO_CUMPLE: Corta abruptamente, no confirma acuerdos, o no hay despedida formal.
+  ¿El agente confirmó acuerdos, próximos pasos y se despidió correctamente?
+  NO_CUMPLE: corta abruptamente, no confirma acuerdos, o no hay despedida formal.
 
-━━━ HERRAMIENTAS ━━━
+━━━ 5. HERRAMIENTAS ━━━
 
 herr_sigue_politicas [CONDUCTA]
-  El gestor respeta los protocolos y políticas de cobranza vigentes.
-  CUMPLE por defecto. NO_CUMPLE SOLO ante incumplimiento evidente: ofrece condiciones no autorizadas,
-  divulga información confidencial de terceros, viola la privacidad del deudor.
+  ¿El agente respetó los protocolos y políticas de cobranza vigentes?
+  CUMPLE por defecto. NO_CUMPLE SOLO ante incumplimiento evidente: condiciones no autorizadas,
+  divulgación de información confidencial, violación de la privacidad del deudor.
 
 herr_explica_ofrecidas [ACCIÓN]
-  El gestor explica claramente las herramientas disponibles (planes, descuentos, modos de pago).
-  CUMPLE: "Tiene la opción de pago en 3 cuotas, o un descuento del 15% si paga en efectivo hoy"
-  NO_CUMPLE: Solo menciona que hay opciones sin explicarlas, o directamente no las menciona.
+  ¿El agente explicó claramente las herramientas disponibles (planes, descuentos, modos de pago)?
+  NO_CUMPLE: solo menciona que hay opciones sin explicarlas, o no las menciona.
 
 herr_ofrece_pex [ACCIÓN]
-  El gestor ofrece la herramienta PEX cuando corresponde al perfil del deudor.
-  NO_APLICA: si el perfil claramente no aplica (deuda judicial, monto incompatible con PEX).
-  CUMPLE: Menciona u ofrece explícitamente PEX al cliente.
-  NO_CUMPLE: Corresponde ofrecerlo según el perfil pero no lo menciona.
+  ¿El agente ofreció la herramienta Pex cuando correspondía según el perfil del deudor?
+  NO_APLICA: si el perfil claramente no aplica (deuda judicial, monto incompatible con Pex).
+  NO_CUMPLE: corresponde ofrecerlo según el perfil pero no lo menciona.
 
-━━━ DOCUMENTACIÓN ━━━
+━━━ 6. DOCUMENTACIÓN ━━━
 
 doc_codifica [ACCIÓN]
-  El gestor menciona o confirma que registra el resultado en el sistema.
+  ¿El agente registró correctamente el resultado de la gestión en el sistema?
   NO_APLICA (por defecto): salvo que el gestor lo mencione explícitamente en la llamada.
-  CUMPLE: "Lo dejo codificado en el sistema" / "Registro el acuerdo en la plataforma ahora"
-  NO_CUMPLE: El gestor dice explícitamente que NO va a registrar o que no puede hacerlo.
+  NO_CUMPLE: el gestor dice explícitamente que NO va a registrar o que no puede hacerlo.
 
 doc_gestiones_ant [ACCIÓN]
-  El gestor consulta y tiene en cuenta el historial de gestiones anteriores del cliente.
-  CUMPLE: "Veo que la última gestión fue el 5 de marzo..." / "Según el historial, ya acordaron..."
-  NO_CUMPLE: Actúa completamente sin referencias al historial cuando este debería consultarse.
+  ¿El agente consultó y consideró el historial de gestiones previas del cliente?
+  NO_CUMPLE: actúa sin referencias al historial cuando este debería consultarse.
 
 doc_act_demograficos [ACCIÓN]
-  El gestor actualiza o verifica datos demográficos del cliente (teléfono, dirección, email).
-  NO_APLICA: si no hay necesidad ni oportunidad de actualizar datos en esta llamada.
-  CUMPLE: "¿Sigue viviendo en la misma dirección?" / "¿Cambió de número de teléfono?"
-  NO_CUMPLE: Había oportunidad clara de verificar/actualizar datos y no lo hizo.
+  ¿El agente actualizó o verificó datos demográficos del cliente (teléfono, dirección)?
+  NO_APLICA: si no hubo necesidad ni oportunidad de actualizar datos en esta llamada.
+  NO_CUMPLE: había oportunidad clara de verificar/actualizar datos y no lo hizo.
 
-━━━ COMPLIANCE — BASICS (peso 35%) ━━━
+━━━ 7. COMPLIANCE — BASICS (peso 35%) ━━━
 
 bas_identificacion [ACCIÓN]
-  El gestor verifica la identidad del interlocutor antes de brindar información sensible.
-  CUMPLE: "¿Estoy hablando con [nombre]?" / "¿Puede confirmarme su número de DNI?"
-  NO_CUMPLE: Brinda montos, datos de la deuda u otra información sensible sin verificar quién es.
+  ¿El agente verificó la identidad del interlocutor antes de brindar información?
+  NO_CUMPLE: brinda montos o datos de la deuda sin verificar quién es.
 
 bas_informacion [ACCIÓN]
-  La información brindada sobre la deuda es correcta, completa y verificable.
-  CUMPLE: Monto correcto, nombre correcto, deuda identificada y explicada con claridad.
-  NO_CUMPLE: Da montos incorrectos, nombre equivocado, o información contradictoria en la misma llamada.
+  ¿La información sobre la deuda fue correcta, completa y verificable?
+  NO_CUMPLE: da montos incorrectos, nombre equivocado, o información contradictoria.
 
 bas_respeto [CONDUCTA]
-  El gestor mantiene trato respetuoso durante toda la llamada, sin presión indebida.
-  CUMPLE por defecto. NO_CUMPLE SOLO ante: insultos directos, amenazas explícitas, gritos, acoso,
-  sarcasmo ofensivo, o coerción explícita ("lo voy a denunciar", "le voy a bloquear todo").
-  NO es violación: tono firme, urgencia, insistencia respetuosa, trato informal, frustración moderada.
-  Ante la menor duda: CUMPLE.
+  ¿El agente mantuvo tono respetuoso sin presión indebida durante toda la llamada?
+  CUMPLE por defecto. NO_CUMPLE SOLO ante insultos, amenazas explícitas, gritos, acoso o coerción.
+  NO es violación: tono firme, urgencia, insistencia respetuosa. Ante la menor duda: CUMPLE.
 
 bas_veracidad [CONDUCTA]
-  El gestor no brinda información falsa ni hace promesas que no puede cumplir.
+  ¿El agente evitó información falsa y promesas que no puede cumplir?
   CUMPLE por defecto. NO_CUMPLE SOLO ante mentira o dato incorrecto verificable en la transcripción.
-  Ej NO_CUMPLE: dice que el monto es $X y luego en la misma llamada dice que es $Y diferente.
+
+════════════════════════════════════════════════
+PASO 5 — FLAGS DE LA LLAMADA
+════════════════════════════════════════════════
+
+Indicá "SI" o "NO_APLICA" para cada uno, según lo que se evidencie en la transcripción:
+  • llamada_cortada         — la llamada se cortó de forma abrupta o incompleta
+  • problema_sonido         — hubo problemas de sonido (eco, voz entrecortada, volumen)
+  • problema_conectividad   — hubo problemas de conexión/señal
+  • problema_calidad_audio  — la calidad del audio dificultó la comprensión
+  • sistema_lento           — el gestor mencionó lentitud o demoras del sistema
+  • empatia_covid           — el gestor mostró empatía relacionada con COVID
+Los flags son informativos y NO afectan el puntaje.
 
 ════════════════════════════════════════════════
 FORMATO DE RESPUESTA
@@ -289,7 +293,6 @@ Respondé ÚNICAMENTE con JSON válido. Sin texto antes ni después del JSON.
   "pre_analysis": {
     "call_type": "TITULAR|TERCERO|NO_CONTACTO",
     "call_outcome": "descripción breve del resultado de la llamada",
-    "sufficient_content": true,
     "notes": "observaciones relevantes (opcional, omitir si no hay nada relevante)"
   },
   "scores": {
@@ -313,6 +316,14 @@ Respondé ÚNICAMENTE con JSON válido. Sin texto antes ni después del JSON.
     "bas_informacion": "CUMPLE|NO_CUMPLE|NO_APLICA",
     "bas_respeto": "CUMPLE|NO_CUMPLE|NO_APLICA",
     "bas_veracidad": "CUMPLE|NO_CUMPLE|NO_APLICA"
+  },
+  "flags": {
+    "llamada_cortada": "SI|NO_APLICA",
+    "problema_sonido": "SI|NO_APLICA",
+    "problema_conectividad": "SI|NO_APLICA",
+    "problema_calidad_audio": "SI|NO_APLICA",
+    "sistema_lento": "SI|NO_APLICA",
+    "empatia_covid": "SI|NO_APLICA"
   },
   "justifications": {
     "ea_preg_motivo_atraso": "Motivo en ≤12 palabras. Cita: 'GESTOR: ...'",
@@ -345,6 +356,24 @@ function validateScoreValue(val: unknown): ScoreValue {
     return val as ScoreValue;
   }
   return 'NO_APLICA';
+}
+
+function validateFlagValue(val: unknown): FlagValue {
+  return typeof val === 'string' && val.toUpperCase().replace(/\s+/g, '_') === 'SI'
+    ? 'SI'
+    : 'NO_APLICA';
+}
+
+function parseFlags(raw: unknown): CallFlags {
+  const f = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    llamada_cortada: validateFlagValue(f.llamada_cortada),
+    problema_sonido: validateFlagValue(f.problema_sonido),
+    problema_conectividad: validateFlagValue(f.problema_conectividad),
+    problema_calidad_audio: validateFlagValue(f.problema_calidad_audio),
+    sistema_lento: validateFlagValue(f.sistema_lento),
+    empatia_covid: validateFlagValue(f.empatia_covid),
+  };
 }
 
 export async function scoreWithGPT(transcript: string): Promise<ScoreResult> {
@@ -387,15 +416,13 @@ export async function scoreWithGPT(transcript: string): Promise<ScoreResult> {
     ? {
         call_type: String(parsedPreAnalysis.call_type ?? ''),
         call_outcome: String(parsedPreAnalysis.call_outcome ?? ''),
-        sufficient_content: Boolean(parsedPreAnalysis.sufficient_content),
         notes: parsedPreAnalysis.notes ? String(parsedPreAnalysis.notes) : undefined,
       }
     : undefined;
 
-  logger.info(
-    { call_type: preAnalysis?.call_type, sufficient_content: preAnalysis?.sufficient_content },
-    'scoring pre-analysis',
-  );
+  const flags = parseFlags(parsed.flags);
+
+  logger.info({ call_type: preAnalysis?.call_type }, 'scoring pre-analysis');
 
   const scores: ScoringFields = {
     ea_preg_motivo_atraso: validateScoreValue(parsedScores.ea_preg_motivo_atraso),
@@ -424,11 +451,12 @@ export async function scoreWithGPT(transcript: string): Promise<ScoreResult> {
     transcript_used_for_scoring: normalizedTranscript,
     pre_analysis: preAnalysis,
     scores,
+    flags,
     justifications,
     modelOutput: parsed,
   };
 
-  return { scores, pre_analysis: preAnalysis, raw: normalizedRaw };
+  return { scores, pre_analysis: preAnalysis, flags, raw: normalizedRaw };
 }
 
 async function normalizeTranscriptForScoring(transcript: string): Promise<string> {

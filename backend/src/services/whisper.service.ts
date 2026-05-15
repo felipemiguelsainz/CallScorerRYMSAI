@@ -1,6 +1,13 @@
 import OpenAI from 'openai';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import crypto from 'crypto';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { logger } from '../lib/logger';
+
+const execFileAsync = promisify(execFile);
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -14,37 +21,143 @@ export interface TranscribeResult {
   duration_s: number | undefined;
 }
 
+interface WhisperVerboseJson {
+  text: string;
+  duration?: number;
+  segments?: unknown[];
+  words?: unknown[];
+}
+
+/**
+ * Convert any audio file to a clean 16 kHz mono PCM WAV with normalized volume.
+ * Whisper hallucinates (loops a single phrase forever) when fed odd codecs,
+ * very low volume, or unusual sample rates — common in call-center recordings.
+ * A normalized WAV eliminates almost all of those loops.
+ */
+async function preprocessToWav(inputPath: string): Promise<{ path: string; cleanup: boolean }> {
+  const wavPath = path.join(os.tmpdir(), `whisper-${crypto.randomUUID()}.wav`);
+  try {
+    await execFileAsync('ffmpeg', [
+      '-i', inputPath,
+      '-ar', '16000', // 16 kHz — Whisper's native rate
+      '-ac', '1', // mono
+      '-af', 'loudnorm', // normalize loudness so quiet audio is still heard
+      '-c:a', 'pcm_s16le',
+      '-y',
+      wavPath,
+    ]);
+    return { path: wavPath, cleanup: true };
+  } catch (err) {
+    logger.warn({ err, inputPath }, 'ffmpeg preprocess failed — using original file');
+    return { path: inputPath, cleanup: false };
+  }
+}
+
+/**
+ * Detect a Whisper hallucination loop: the same short phrase repeated many
+ * times (e.g. "¿Quién es ese hombre?" x100). Real dialogue has variety.
+ */
+function isHallucinatedTranscript(text: string): boolean {
+  if (!text || text.trim().length < 60) return false;
+  const sentences = text
+    .split(/[.!?\n]+/)
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => s.length > 0);
+  if (sentences.length < 8) return false;
+  const unique = new Set(sentences);
+  // 8+ sentences but ≤3 distinct → almost certainly a decoding loop
+  return unique.size <= 3;
+}
+
+async function runWhisper(wavPath: string, temperature: number): Promise<WhisperVerboseJson> {
+  const response = await openai.audio.transcriptions.create({
+    file: fs.createReadStream(wavPath),
+    model: 'whisper-1',
+    response_format: 'verbose_json',
+    language: 'es',
+    temperature,
+    // Keep SHORT and free of full sentences — Whisper repeats prompt text
+    // verbatim on low-energy audio. A brief vocabulary hint is safe.
+    prompt: 'Llamada de cobranza en español rioplatense.',
+  });
+  return response as unknown as WhisperVerboseJson;
+}
+
+const CHUNK_SECONDS = 120;
+
+/**
+ * Split a WAV into fixed-length chunks. Whisper hallucination loops poison
+ * everything *after* the bad segment; chunking confines the damage so one
+ * bad chunk never ruins the whole call. Returns chunk paths in order.
+ */
+async function splitIntoChunks(wavPath: string, outDir: string): Promise<string[]> {
+  await execFileAsync('ffmpeg', [
+    '-i', wavPath,
+    '-f', 'segment',
+    '-segment_time', String(CHUNK_SECONDS),
+    '-ar', '16000',
+    '-ac', '1',
+    '-c:a', 'pcm_s16le',
+    '-y',
+    path.join(outDir, 'chunk_%03d.wav'),
+  ]);
+  return fs
+    .readdirSync(outDir)
+    .filter((f) => f.startsWith('chunk_') && f.endsWith('.wav'))
+    .sort()
+    .map((f) => path.join(outDir, f));
+}
+
+/** Transcribe one chunk, retrying at higher temperature if it loops. */
+async function transcribeChunk(chunkPath: string): Promise<WhisperVerboseJson> {
+  let result = await runWhisper(chunkPath, 0);
+  for (const temp of [0.4, 0.7]) {
+    if (!isHallucinatedTranscript(result.text)) break;
+    logger.warn({ chunkPath, temp }, 'whisper chunk hallucinated — retrying hotter');
+    result = await runWhisper(chunkPath, temp);
+  }
+  return result;
+}
+
 export async function transcribeAudio(filePath: string): Promise<TranscribeResult> {
   if (!fs.existsSync(filePath)) {
     throw Object.assign(new Error(`Archivo no encontrado: ${filePath}`), { status: 400 });
   }
 
-  const fileStream = fs.createReadStream(filePath);
+  const { path: wavPath, cleanup } = await preprocessToWav(filePath);
+  const chunkDir = fs.mkdtempSync(path.join(os.tmpdir(), 'whisper-chunks-'));
 
-  const response = await openai.audio.transcriptions.create({
-    file: fileStream,
-    model: 'whisper-1',
-    response_format: 'verbose_json',
-    language: 'es',
-    temperature: 0,
-    prompt:
-      'Llamada de cobranza profesional en español rioplatense entre un agente de cobros y un deudor. Transcribir únicamente lo que se dice con claridad. No agregar palabras de relleno, expresiones de afecto ("mi amor", "querida", "cariño", etc.) ni texto que no sea claramente audible. Mantener nombres y apellidos tal como se oyen. Preservar frases de identificación y motivo de no pago. No resumir ni reinterpretar.',
-  });
+  try {
+    const chunkPaths = await splitIntoChunks(wavPath, chunkDir);
+    logger.info({ filePath, chunks: chunkPaths.length }, 'transcribing audio in chunks');
 
-  const verboseJson = response as unknown as {
-    text: string;
-    duration?: number;
-    segments?: unknown[];
-    words?: unknown[];
-  };
+    const parts: string[] = [];
+    let totalDuration = 0;
 
-  const dialogueTranscript = await formatAsDialogue(verboseJson.text).then(verifyDialogue);
+    for (const chunkPath of chunkPaths) {
+      const result = await transcribeChunk(chunkPath);
+      // If a chunk still loops after retries, drop its garbage rather than
+      // letting it pollute the transcript — the rest of the call stays valid.
+      if (result.text?.trim() && !isHallucinatedTranscript(result.text)) {
+        parts.push(result.text.trim());
+      } else if (result.text?.trim()) {
+        logger.warn({ chunkPath }, 'chunk hallucinated after retries — discarding its text');
+      }
+      if (typeof result.duration === 'number') totalDuration += result.duration;
+    }
 
-  return {
-    transcript: dialogueTranscript,
-    transcript_json: verboseJson,
-    duration_s: verboseJson.duration ? Math.round(verboseJson.duration) : undefined,
-  };
+    const fullText = parts.join(' ');
+    const dialogueTranscript = await formatAsDialogue(fullText).then(verifyDialogue);
+
+    return {
+      transcript: dialogueTranscript,
+      transcript_json: { text: fullText, chunks: chunkPaths.length },
+      duration_s: totalDuration > 0 ? Math.round(totalDuration) : undefined,
+    };
+  } finally {
+    if (cleanup) fs.promises.unlink(wavPath).catch(() => {});
+    fs.promises.rm(chunkDir, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 export async function reformatTranscriptDialogue(rawText: string): Promise<string> {

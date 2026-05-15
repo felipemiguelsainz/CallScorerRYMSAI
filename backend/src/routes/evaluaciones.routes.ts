@@ -4,9 +4,12 @@ import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import { createReadStream } from 'fs';
 import fs from 'fs/promises';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import AdmZip from 'adm-zip';
 import { authMiddleware, AuthRequest } from '../middleware/auth.middleware';
 import { requireRole } from '../middleware/role.middleware';
-import { upload, assertMp3MimeType } from '../middleware/upload.middleware';
+import { upload, uploadBulk, assertMp3MimeType } from '../middleware/upload.middleware';
 import { uploadAudioLimiter } from '../middleware/rate-limit.middleware';
 import { filterByUserScope } from '../middleware/scope.middleware';
 import prisma from '../lib/prisma';
@@ -14,9 +17,11 @@ import * as scoringService from '../services/scoring.service';
 import * as debtorService from '../services/debtor-analysis.service';
 import * as pdfService from '../services/pdf.service';
 import { sanitizeObjectStrings } from '../lib/sanitize';
+import { invalidateCachePattern } from '../lib/redis';
 import { storageProvider } from '../modules/storage/local-storage-provider';
 import { enqueueAudioProcessingJob } from '../modules/audio-processing/queue';
 import { logger } from '../lib/logger';
+import { env } from '../config/env';
 
 const router = Router();
 router.use(authMiddleware);
@@ -99,6 +104,115 @@ const updateEvaluacionSchema = z.object({
   flag_conectividad: z.boolean().optional(),
   flag_empatia_covid: z.boolean().optional(),
 });
+
+// ─── BULK UPLOAD ──────────────────────────────────────────────────────────────
+router.post(
+  '/bulk',
+  requireRole('AUDITOR', 'SUPERVISOR', 'ADMIN'),
+  uploadBulk.array('files', 100),
+  async (req: AuthRequest, res: Response) => {
+    const files = (req.files ?? []) as Express.Multer.File[];
+    if (!files.length) {
+      res.status(400).json({ error: 'No se recibieron archivos' });
+      return;
+    }
+
+    const { gestorId, clienteId } = req.body as { gestorId?: string; clienteId?: string };
+    if (!gestorId) {
+      await Promise.all(files.map((f) => fs.unlink(f.path).catch(() => undefined)));
+      res.status(400).json({ error: 'gestorId es requerido' });
+      return;
+    }
+
+    const gestor = await prisma.gestor.findFirst({ where: { id: gestorId, deletedAt: null } });
+    if (!gestor) {
+      await Promise.all(files.map((f) => fs.unlink(f.path).catch(() => undefined)));
+      res.status(404).json({ error: 'Gestor no encontrado' });
+      return;
+    }
+
+    // Expand ZIPs into individual MP3 entries
+    type Mp3Entry = { originalName: string; diskPath: string; tempFromZip: boolean };
+    const mp3Entries: Mp3Entry[] = [];
+
+    for (const file of files) {
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (ext === '.zip') {
+        try {
+          const zip = new AdmZip(file.path);
+          for (const entry of zip.getEntries()) {
+            if (entry.isDirectory) continue;
+            const entryExt = path.extname(entry.entryName).toLowerCase();
+            const audioExts = new Set(['.gsm', '.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.webm', '.flac']);
+            if (!audioExts.has(entryExt)) continue;
+            const baseName = path.basename(entry.entryName);
+            const tempPath = path.join(env.UPLOADS_DIR, `${uuidv4()}-${Date.now()}${entryExt}`);
+            zip.extractEntryTo(entry, path.dirname(tempPath), false, true, false, path.basename(tempPath));
+            mp3Entries.push({ originalName: baseName, diskPath: tempPath, tempFromZip: true });
+          }
+        } catch (err) {
+          logger.warn({ err, file: file.originalname }, 'bulk: failed to extract ZIP');
+        } finally {
+          await fs.unlink(file.path).catch(() => undefined);
+        }
+      } else {
+        mp3Entries.push({ originalName: file.originalname, diskPath: file.path, tempFromZip: false });
+      }
+    }
+
+    const results: { call_id: string; id?: string; status: 'queued' | 'skipped' | 'error'; reason?: string }[] = [];
+
+    for (const entry of mp3Entries) {
+      const callId = path.basename(entry.originalName, path.extname(entry.originalName)).slice(0, 100);
+
+      const existing = await prisma.evaluation.findFirst({ where: { call_id: callId, deletedAt: null } });
+      if (existing) {
+        await fs.unlink(entry.diskPath).catch(() => undefined);
+        results.push({ call_id: callId, status: 'skipped', reason: 'call_id duplicado' });
+        continue;
+      }
+
+      try {
+        await assertMp3MimeType(entry.diskPath);
+      } catch {
+        await fs.unlink(entry.diskPath).catch(() => undefined);
+        results.push({ call_id: callId, status: 'error', reason: 'Archivo no es un MP3 válido' });
+        continue;
+      }
+
+      try {
+        const filename = `${uuidv4()}-${Date.now()}.mp3`;
+        const storedPath = await storageProvider.upload(entry.diskPath, filename);
+
+        const evaluation = await prisma.evaluation.create({
+          data: {
+            call_id: callId,
+            account_number: 'PENDING',
+            assignment_number: 'PENDING',
+            contact_type: 'NO_CONTACTO',
+            assignment_date: new Date(),
+            gestorId,
+            ...(clienteId ? { clienteId } : {}),
+            auditorId: req.user!.userId,
+            audio_filename: filename,
+            audio_path: storedPath,
+            processing_state: 'PENDING',
+          },
+        });
+
+        await enqueueAudioProcessingJob({ evaluationId: evaluation.id, filePath: storedPath });
+
+        results.push({ call_id: callId, id: evaluation.id, status: 'queued' });
+      } catch (err) {
+        logger.error({ err, callId }, 'bulk: failed to create evaluation');
+        await fs.unlink(entry.diskPath).catch(() => undefined);
+        results.push({ call_id: callId, status: 'error', reason: 'Error interno' });
+      }
+    }
+
+    res.status(207).json({ results });
+  },
+);
 
 router.get('/', async (req: AuthRequest, res: Response) => {
   const { status, minScore, limit = '20', cursor, gestorId, clienteId, fechaDesde, fechaHasta } = req.query as Record<string, string>;
@@ -225,7 +339,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 router.get('/:id/status', async (req: AuthRequest, res: Response) => {
   const evaluation = await prisma.evaluation.findFirst({
     where: { id: req.params.id, deletedAt: null, ...(req.scopeFilter ?? {}) },
-    select: { processing_state: true, transcript: true },
+    select: { processing_state: true, transcript: true, score_total: true, debtor_analysis: { select: { nivel_conflicto: true } } },
   });
 
   if (!evaluation) {
@@ -234,10 +348,16 @@ router.get('/:id/status', async (req: AuthRequest, res: Response) => {
   }
 
   let status: 'processing' | 'ready' | 'error' = 'processing';
-  if (evaluation.processing_state === 'READY' || evaluation.transcript) status = 'ready';
+  if (evaluation.processing_state === 'READY') status = 'ready';
   if (evaluation.processing_state === 'ERROR') status = 'error';
 
-  res.json({ status });
+  res.json({
+    status,
+    ...(status === 'ready' ? {
+      score_total: evaluation.score_total ? Number(evaluation.score_total) : 0,
+      nivel_conflicto: evaluation.debtor_analysis?.nivel_conflicto ?? null,
+    } : {}),
+  });
 });
 
 router.put(
@@ -295,8 +415,31 @@ router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res: Respon
     return;
   }
 
-  await prisma.evaluation.update({ where: { id: req.params.id }, data: { deletedAt: new Date() } });
-  res.json({ message: 'Evaluaci�n eliminada l�gicamente' });
+  await prisma.evaluation.delete({ where: { id: req.params.id } });
+  await invalidateCachePattern('dashboard:*');
+  res.json({ message: 'Evaluación eliminada' });
+});
+
+router.post('/:id/requeue', requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
+  const existing = await prisma.evaluation.findFirst({
+    where: { id: req.params.id, deletedAt: null },
+  });
+  if (!existing) {
+    res.status(404).json({ error: 'Evaluación no encontrada' });
+    return;
+  }
+  if (!existing.audio_path) {
+    res.status(400).json({ error: 'Sin archivo de audio para reprocesar.' });
+    return;
+  }
+
+  await prisma.evaluation.update({
+    where: { id: req.params.id },
+    data: { processing_state: 'PENDING', transcript: null, transcript_json: Prisma.JsonNull, score_total: 0, score_core: 0, score_basics: 0 },
+  });
+
+  await enqueueAudioProcessingJob({ evaluationId: req.params.id, filePath: existing.audio_path });
+  res.json({ message: 'Evaluación reencolada para reprocesamiento.' });
 });
 
 router.post(

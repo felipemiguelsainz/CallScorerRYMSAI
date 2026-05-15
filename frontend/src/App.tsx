@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import NewEvaluation from './pages/NewEvaluation';
 import EvaluationDetail from './pages/EvaluationDetail';
 import AdminPanel from './pages/AdminPanel';
+import BulkUpload from './pages/BulkUpload';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -50,6 +51,7 @@ export default function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="evaluaciones/nueva" element={<NewEvaluation />} />
+          <Route path="evaluaciones/carga-masiva" element={<BulkUpload />} />
           <Route path="evaluaciones/:id" element={<EvaluationDetail />} />
           <Route
             path="admin"

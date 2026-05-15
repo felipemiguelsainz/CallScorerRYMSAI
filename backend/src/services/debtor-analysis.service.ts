@@ -156,6 +156,24 @@ function applyTranscriptFallback(
   };
 }
 
+// Handles numbers, strings, and Argentine format ("$15.000" or "1.500,50")
+function parseAmount(value: unknown): number | null {
+  if (typeof value === 'number') return isNaN(value) ? null : value;
+  if (typeof value === 'string') {
+    let s = value.replace(/[$\s]/g, '');
+    // Argentine: dot=thousands sep, comma=decimal → "1.500,50" → "1500.50"
+    if (s.includes(',')) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else if (/\.\d{3}$/.test(s)) {
+      // Dot followed by exactly 3 digits is a thousands separator → "15.000" → "15000"
+      s = s.replace(/\./g, '');
+    }
+    const n = parseFloat(s);
+    return isNaN(n) ? null : n;
+  }
+  return null;
+}
+
 // Converts any AI JSON into a stable internal shape with strict defaults.
 export function normalizeDebtorAnalysisPayload(
   parsed: Record<string, unknown>,
@@ -181,8 +199,8 @@ export function normalizeDebtorAnalysisPayload(
       parsed.fecha_promesa && typeof parsed.fecha_promesa === 'string'
         ? new Date(parsed.fecha_promesa)
         : null,
-    monto_prometido: typeof parsed.monto_prometido === 'number' ? parsed.monto_prometido : null,
-    monto_adeudado: typeof parsed.monto_adeudado === 'number' ? parsed.monto_adeudado : null,
+    monto_prometido: parseAmount(parsed.monto_prometido),
+    monto_adeudado: parseAmount(parsed.monto_adeudado),
     nivel_conflicto: VALID_CONFLICT_LEVELS.includes(parsed.nivel_conflicto as ConflictLevel)
       ? (parsed.nivel_conflicto as ConflictLevel)
       : 'MEDIO',
@@ -240,6 +258,56 @@ const VALID_JUSTIFICATIONS: DebtJustification[] = [
 
 const VALID_CONFLICT_LEVELS: ConflictLevel[] = ['BAJO', 'MEDIO', 'ALTO'];
 
+const AMOUNT_VERIFY_PROMPT = `Sos un verificador de montos de dinero en llamadas de cobranza.
+Leé la transcripción y extraé ÚNICAMENTE los importes de dinero. Sé preciso.
+
+  • monto_adeudado: el monto TOTAL de la deuda/saldo que el GESTOR le informa al deudor.
+      Es lo que se está cobrando. Si se mencionan varios conceptos, sumalos.
+      Si nunca se menciona un monto de deuda, devolvé null.
+  • monto_prometido: el importe concreto que el DEUDOR se compromete a pagar.
+      Si el deudor no promete un monto concreto, devolvé null.
+
+Reglas de formato (español rioplatense):
+  • El punto es separador de miles, la coma es decimal.
+  • "5.696.261 pesos con 80 centavos" → 5696261.80
+  • "$15.000" → 15000
+  • "ciento diez mil" → 110000
+  • Devolvé números puros, sin símbolos ni separadores de miles.
+
+Respondé ÚNICAMENTE con JSON válido:
+{ "monto_adeudado": número o null, "monto_prometido": número o null }`;
+
+/**
+ * Dedicated, focused second pass to verify the money amounts. The general
+ * debtor analysis sometimes misses or misreads amounts; a narrow prompt that
+ * only looks at money is far more reliable for this critical field.
+ */
+async function verifyAmounts(
+  transcript: string,
+): Promise<{ monto_adeudado: number | null; monto_prometido: number | null }> {
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4.1',
+      messages: [
+        { role: 'system', content: AMOUNT_VERIFY_PROMPT },
+        { role: 'user', content: `TRANSCRIPCIÓN:\n\n${transcript}` },
+      ],
+      temperature: 0,
+      response_format: { type: 'json_object' },
+    });
+    const parsed = JSON.parse(completion.choices[0].message.content ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    return {
+      monto_adeudado: parseAmount(parsed.monto_adeudado),
+      monto_prometido: parseAmount(parsed.monto_prometido),
+    };
+  } catch {
+    return { monto_adeudado: null, monto_prometido: null };
+  }
+}
+
 export async function analyzeDebtor(transcript: string): Promise<DebtorAnalysisResult> {
   const completion = await openai.chat.completions.create({
     model: 'gpt-4.1',
@@ -261,5 +329,17 @@ export async function analyzeDebtor(transcript: string): Promise<DebtorAnalysisR
   }
 
   const normalized = normalizeDebtorAnalysisPayload(parsed);
-  return applyTranscriptFallback(normalized, transcript);
+  const result = applyTranscriptFallback(normalized, transcript);
+
+  // Final step: always verify the amounts with a dedicated focused pass.
+  const verified = await verifyAmounts(transcript);
+  if (verified.monto_adeudado != null) {
+    result.analysis.monto_adeudado = verified.monto_adeudado;
+  }
+  if (verified.monto_prometido != null) {
+    result.analysis.monto_prometido = verified.monto_prometido;
+  }
+  (result.raw as Record<string, unknown>).amount_verification = verified;
+
+  return result;
 }

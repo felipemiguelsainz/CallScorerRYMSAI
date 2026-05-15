@@ -12,14 +12,18 @@ const ROLE_OPTIONS: User['role'][] = ['ADMIN', 'SUPERVISOR', 'AUDITOR', 'GESTOR'
 
 interface UserFormState {
   username: string;
+  name: string;
   role: User['role'];
   isActive: boolean;
+  password: string;
 }
 
 const EMPTY_FORM: UserFormState = {
   username: '',
+  name: '',
   role: 'AUDITOR',
   isActive: true,
+  password: '',
 };
 
 export default function AdminUsers() {
@@ -165,8 +169,10 @@ export default function AdminUsers() {
     setEditingUserId(user.id);
     setEditForm({
       username: user.username ?? user.email,
+      name: user.name ?? '',
       role: user.role,
       isActive: user.isActive,
+      password: '',
     });
     setErrorMessage(null);
   }
@@ -180,8 +186,10 @@ export default function AdminUsers() {
   function saveEdit(userId: string) {
     const payload: AdminUserUpdateInput = {
       username: editForm.username,
+      name: editForm.name || undefined,
       role: editForm.role,
       isActive: editForm.isActive,
+      ...(editForm.password ? { password: editForm.password } : {}),
     };
 
     updateMutation.mutate({ id: userId, payload });
@@ -324,17 +332,36 @@ export default function AdminUsers() {
                           <div className="space-y-1">
                             <input
                               className="input"
+                              placeholder="Usuario (login)"
                               value={editForm.username}
                               onChange={(e) =>
                                 setEditForm((prev) => ({ ...prev, username: e.target.value }))
+                              }
+                            />
+                            <input
+                              className="input"
+                              placeholder="Nombre completo"
+                              value={editForm.name}
+                              onChange={(e) =>
+                                setEditForm((prev) => ({ ...prev, name: e.target.value }))
+                              }
+                            />
+                            <input
+                              className="input"
+                              type="password"
+                              placeholder="Nueva contraseña (dejar vacío para no cambiar)"
+                              value={editForm.password}
+                              onChange={(e) =>
+                                setEditForm((prev) => ({ ...prev, password: e.target.value }))
                               }
                             />
                           </div>
                         ) : (
                           <div>
                             <p className="font-medium text-gray-900">
-                              {user.username ?? user.email}
+                              {user.name || user.username || user.email}
                             </p>
+                            <p className="text-xs text-gray-400">{user.username ?? user.email}</p>
                           </div>
                         )}
                       </td>

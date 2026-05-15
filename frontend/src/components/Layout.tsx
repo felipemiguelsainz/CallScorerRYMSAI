@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { LayoutDashboard, PlusCircle, LogOut, Settings } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, LogOut, Settings, ListPlus } from 'lucide-react';
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -15,6 +15,7 @@ export default function Layout() {
   const navItems = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/evaluaciones/nueva', label: 'Nueva Evaluación', icon: PlusCircle },
+    { path: '/evaluaciones/carga-masiva', label: 'Carga Masiva', icon: ListPlus },
     ...(user?.role === 'ADMIN' || user?.role === 'SUPERVISOR'
       ? [{ path: '/admin', label: 'Administración', icon: Settings }]
       : []),

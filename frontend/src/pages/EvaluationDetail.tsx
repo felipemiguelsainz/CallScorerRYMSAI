@@ -14,9 +14,10 @@ import ScoringTable from '../components/ScoringTable';
 import DebtorAnalysisCard from '../components/DebtorAnalysisCard';
 import PDFExportButton from '../components/PDFExportButton';
 import ScoreDisplay from '../components/ScoreDisplay';
-import { ArrowLeft, Brain, CheckCircle, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Brain, CheckCircle, ChevronDown, ChevronUp, RefreshCw, AlertCircle, Heart } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { evaluacionesApi } from '../services/api.service';
+import type { CallFlags } from '../services/api.service';
 
 export default function EvaluationDetail() {
   const { id } = useParams<{ id: string }>();
@@ -158,6 +159,8 @@ export default function EvaluationDetail() {
         isScoring={isScoring}
         hasResult={hasScoringResult}
       />
+
+      <CallFlagsPanel flags={evaluation.ai_scoring_raw?.flags} />
 
       {/* Score summary */}
       {hasScoringResult && (
@@ -431,6 +434,44 @@ function hasEvaluationResult(evaluation: {
     Number(evaluation.score_core) > 0 ||
     Number(evaluation.score_basics) > 0;
   return hasNonZeroScore;
+}
+
+const FLAG_LABELS: { key: keyof CallFlags; label: string; positive?: boolean }[] = [
+  { key: 'llamada_cortada', label: 'Llamada cortada' },
+  { key: 'problema_sonido', label: 'Problema de sonido' },
+  { key: 'problema_conectividad', label: 'Problema de conectividad' },
+  { key: 'problema_calidad_audio', label: 'Problema de calidad de audio' },
+  { key: 'sistema_lento', label: 'Sistema lento' },
+  { key: 'empatia_covid', label: 'Empatía por COVID', positive: true },
+];
+
+function CallFlagsPanel({ flags }: { flags?: CallFlags }) {
+  if (!flags) return null;
+  const active = FLAG_LABELS.filter((f) => flags[f.key] === 'SI');
+  if (active.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+        Observaciones de la llamada
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {active.map((f) => (
+          <span
+            key={f.key}
+            className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
+              f.positive
+                ? 'bg-green-100 text-green-700'
+                : 'bg-amber-100 text-amber-700'
+            }`}
+          >
+            {f.positive ? <Heart size={12} /> : <AlertCircle size={12} />}
+            {f.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function hasCalculationBreakdown(

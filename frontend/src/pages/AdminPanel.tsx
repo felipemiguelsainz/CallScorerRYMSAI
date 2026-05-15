@@ -1,6 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, Pencil, Plus, Trash2, Users, X } from 'lucide-react';
+import { Building2, FileText, Pencil, Plus, Trash2, Users, X } from 'lucide-react';
 import {
   adminApi,
   AdminUser,
@@ -8,6 +8,8 @@ import {
   AdminUserUpdateInput,
   User,
   clientesApi,
+  evaluacionesApi,
+  Evaluation,
   Cliente,
   ClienteCreateInput,
 } from '../services/api.service';
@@ -17,14 +19,17 @@ import {
 const ROLE_OPTIONS: User['role'][] = ['ADMIN', 'SUPERVISOR', 'AUDITOR', 'GESTOR'];
 const EMOJI_OPTIONS = ['🏦', '💳', '🏢', '🏛️', '🌐', '💰', '🏪', '🔷', '⭐', '🎯'];
 
-type Tab = 'usuarios' | 'clientes';
+type Tab = 'usuarios' | 'clientes' | 'evaluaciones';
 
 interface UserFormState {
   username: string;
+  name: string;
   role: User['role'];
   isActive: boolean;
+  password: string;
 }
 
+const EMPTY_USER_FORM: UserFormState = { username: '', name: '', role: 'AUDITOR', isActive: true, password: '' };
 interface ClienteForm {
   nombre: string;
   codigo: string;
@@ -32,7 +37,6 @@ interface ClienteForm {
   isActive: boolean;
 }
 
-const EMPTY_USER_FORM: UserFormState = { username: '', role: 'AUDITOR', isActive: true };
 const EMPTY_CLIENTE_FORM: ClienteForm = { nombre: '', codigo: '', icono: '🏢', isActive: true };
 
 // ─── PANEL PRINCIPAL ──────────────────────────────────────────────────────────
@@ -56,9 +60,12 @@ export default function AdminPanel() {
         <TabButton active={activeTab === 'clientes'} onClick={() => setActiveTab('clientes')} icon={<Building2 size={15} />}>
           Clientes
         </TabButton>
+        <TabButton active={activeTab === 'evaluaciones'} onClick={() => setActiveTab('evaluaciones')} icon={<FileText size={15} />}>
+          Evaluaciones
+        </TabButton>
       </div>
 
-      {activeTab === 'usuarios' ? <TabUsuarios /> : <TabClientes />}
+      {activeTab === 'usuarios' ? <TabUsuarios /> : activeTab === 'clientes' ? <TabClientes /> : <TabEvaluaciones />}
     </div>
   );
 }
@@ -179,12 +186,18 @@ function TabUsuarios() {
 
   function startEdit(user: AdminUser) {
     setEditingUserId(user.id);
-    setEditForm({ username: user.username ?? user.email, role: user.role, isActive: user.isActive });
+    setEditForm({ username: user.username ?? user.email, name: user.name ?? '', role: user.role, isActive: user.isActive, password: '' });
     setErrorMessage(null);
   }
 
   function saveEdit(userId: string) {
-    updateMutation.mutate({ id: userId, payload: { username: editForm.username, role: editForm.role, isActive: editForm.isActive } });
+    updateMutation.mutate({ id: userId, payload: {
+      username: editForm.username,
+      name: editForm.name || undefined,
+      role: editForm.role,
+      isActive: editForm.isActive,
+      ...(editForm.password ? { password: editForm.password } : {}),
+    }});
   }
 
   function deleteUser(user: AdminUser) {
@@ -257,9 +270,25 @@ function TabUsuarios() {
                   <tr key={user.id} className="border-b border-gray-100 align-top">
                     <td className="py-3 pr-4 min-w-48">
                       {isEditing ? (
-                        <input className="input" value={editForm.username} onChange={(e) => setEditForm((p) => ({ ...p, username: e.target.value }))} />
+                        <div className="space-y-1">
+                          <div>
+                            <p className="text-xs text-gray-400 mb-0.5">Usuario (login)</p>
+                            <input className="input" value={editForm.username} onChange={(e) => setEditForm((p) => ({ ...p, username: e.target.value }))} />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400 mb-0.5">Nombre completo</p>
+                            <input className="input" value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400 mb-0.5">Nueva contraseña (vacío = sin cambio)</p>
+                            <input className="input" type="password" value={editForm.password} onChange={(e) => setEditForm((p) => ({ ...p, password: e.target.value }))} />
+                          </div>
+                        </div>
                       ) : (
-                        <p className="font-medium text-gray-900">{user.username ?? user.email}</p>
+                        <div>
+                          <p className="font-medium text-gray-900">{user.name || user.username || user.email}</p>
+                          <p className="text-xs text-gray-400">{user.username ?? user.email}</p>
+                        </div>
                       )}
                     </td>
                     <td className="py-3 pr-4">
@@ -463,6 +492,177 @@ function TabClientes() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── TAB EVALUACIONES ─────────────────────────────────────────────────────────
+
+function TabEvaluaciones() {
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ERROR' | 'PROCESSING' | 'PENDING' | 'READY'>('ALL');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-evaluaciones'],
+    queryFn: () => evaluacionesApi.list({ limit: 100 }).then((r) => r.data),
+  });
+
+  const evaluaciones = useMemo(() => {
+    const all = data?.data ?? [];
+    return all.filter((e) => {
+      if (statusFilter !== 'ALL' && e.processing_state !== statusFilter) return false;
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        if (!e.call_id?.toLowerCase().includes(q) && !e.account_number?.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [data, search, statusFilter]);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => evaluacionesApi.delete(id),
+    onSuccess: () => {
+      setErrorMsg(null);
+      queryClient.invalidateQueries({ queryKey: ['admin-evaluaciones'] });
+    },
+    onError: (err: { response?: { data?: { error?: string } } }) => {
+      setErrorMsg(err.response?.data?.error ?? 'No se pudo eliminar.');
+    },
+  });
+
+  const requeueMutation = useMutation({
+    mutationFn: (id: string) => evaluacionesApi.requeue(id),
+    onSuccess: () => {
+      setErrorMsg(null);
+      queryClient.invalidateQueries({ queryKey: ['admin-evaluaciones'] });
+    },
+    onError: (err: { response?: { data?: { error?: string } } }) => {
+      setErrorMsg(err.response?.data?.error ?? 'No se pudo reintentar.');
+    },
+  });
+
+  const scoreMutation = useMutation({
+    mutationFn: (id: string) => evaluacionesApi.score(id),
+    onSuccess: () => {
+      setErrorMsg(null);
+      queryClient.invalidateQueries({ queryKey: ['admin-evaluaciones'] });
+    },
+    onError: (err: { response?: { data?: { error?: string } } }) => {
+      setErrorMsg(err.response?.data?.error ?? 'No se pudo puntuar.');
+    },
+  });
+
+  function handleDelete(ev: Evaluation) {
+    if (!window.confirm(`¿Eliminar la evaluación ${ev.call_id}? Esta acción no se puede deshacer.`)) return;
+    deleteMutation.mutate(ev.id);
+  }
+
+  const statusLabel: Record<string, string> = {
+    PENDING: 'Pendiente',
+    PROCESSING: 'Procesando',
+    READY: 'Lista',
+    ERROR: 'Error',
+  };
+  const statusColor: Record<string, string> = {
+    PENDING: 'bg-gray-100 text-gray-600',
+    PROCESSING: 'bg-blue-100 text-blue-700',
+    READY: 'bg-green-100 text-green-700',
+    ERROR: 'bg-red-100 text-red-700',
+  };
+
+  function getStatusLabel(ev: Evaluation) {
+    return statusLabel[ev.processing_state] ?? ev.processing_state;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-3">
+        <input
+          className="input flex-1"
+          placeholder="Buscar por call_id o número de cuenta..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select
+          className="input w-44"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+        >
+          <option value="ALL">Todos los estados</option>
+          <option value="ERROR">Error</option>
+          <option value="PROCESSING">Procesando</option>
+          <option value="PENDING">Pendiente</option>
+          <option value="READY">Lista</option>
+        </select>
+      </div>
+
+      {errorMsg && <p className="text-sm text-red-600">{errorMsg}</p>}
+
+      <div className="card overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs font-semibold text-gray-500 border-b border-gray-200">
+              <th className="pb-2 pr-4">Call ID</th>
+              <th className="pb-2 pr-4">Gestor</th>
+              <th className="pb-2 pr-4">Estado</th>
+              <th className="pb-2 pr-4">Fecha</th>
+              <th className="pb-2">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr><td colSpan={5} className="py-4 text-gray-500">Cargando...</td></tr>
+            ) : evaluaciones.length === 0 ? (
+              <tr><td colSpan={5} className="py-4 text-gray-500">Sin resultados.</td></tr>
+            ) : evaluaciones.map((ev) => (
+              <tr key={ev.id} className="border-b border-gray-100 hover:bg-gray-50">
+                <td className="py-2.5 pr-4 font-medium text-gray-900 max-w-[200px] truncate">{ev.call_id}</td>
+                <td className="py-2.5 pr-4 text-gray-600 max-w-[140px] truncate">{ev.gestor?.name ?? ev.gestorId}</td>
+                <td className="py-2.5 pr-4">
+                  <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${statusColor[ev.processing_state] ?? 'bg-gray-100 text-gray-600'}`}>
+                    {getStatusLabel(ev)}
+                  </span>
+                </td>
+                <td className="py-2.5 pr-4 text-gray-500 text-xs">
+                  {new Date(ev.createdAt).toLocaleDateString('es-AR')}
+                </td>
+                <td className="py-2.5">
+                  <div className="flex gap-1.5">
+                    {ev.processing_state === 'ERROR' && (
+                      <button
+                        className="px-2 py-1 rounded text-xs font-semibold border border-blue-200 text-blue-700 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                        onClick={() => requeueMutation.mutate(ev.id)}
+                        disabled={requeueMutation.isPending}
+                      >
+                        Reintentar
+                      </button>
+                    )}
+                    {ev.processing_state === 'READY' && Number(ev.score_total) === 0 && (
+                      <button
+                        className="px-2 py-1 rounded text-xs font-semibold border border-amber-200 text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50"
+                        onClick={() => scoreMutation.mutate(ev.id)}
+                        disabled={scoreMutation.isPending}
+                      >
+                        Puntuar
+                      </button>
+                    )}
+                    <button
+                      className="px-2 py-1 rounded text-xs font-semibold border border-red-200 text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50"
+                      onClick={() => handleDelete(ev)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 size={13} className="inline mr-1" />
+                      Eliminar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

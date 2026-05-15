@@ -44,7 +44,7 @@ function toMs(duration: string): number {
 
 export function setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
   const sameSite = env.COOKIE_SAME_SITE;
-  const secure = env.NODE_ENV === 'production' || sameSite === 'none';
+  const secure = env.COOKIE_SECURE === 'false' ? false : (env.NODE_ENV === 'production' || sameSite === 'none');
   const cookieDomain = env.COOKIE_DOMAIN || undefined;
 
   res.cookie('accessToken', accessToken, {
@@ -68,7 +68,7 @@ export function setAuthCookies(res: Response, accessToken: string, refreshToken:
 
 export function clearAuthCookies(res: Response): void {
   const sameSite = env.COOKIE_SAME_SITE;
-  const secure = env.NODE_ENV === 'production' || sameSite === 'none';
+  const secure = env.COOKIE_SECURE === 'false' ? false : (env.NODE_ENV === 'production' || sameSite === 'none');
   const cookieDomain = env.COOKIE_DOMAIN || undefined;
 
   res.clearCookie('accessToken', {

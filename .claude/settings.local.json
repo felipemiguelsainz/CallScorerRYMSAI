@@ -14,7 +14,10 @@
       "Bash(curl -s -H \"Authorization: token $\\(cat /c/Users/felip/.config/gh/hosts.yml)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); r=d['workflow_runs'][0]; print\\(r['id'], r['status'], r['conclusion']\\)\")",
       "Bash(npm run *)",
-      "Bash(npm audit *)"
+      "Bash(npm audit *)",
+      "Bash(docker compose *)",
+      "Bash(docker exec *)",
+      "Bash(curl -s -X POST http://localhost:3000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"test@test.com\",\"password\":\"test\"}' -w \"\\\\nHTTP_STATUS:%{http_code}\\\\n\")"
     ]
   }
 }

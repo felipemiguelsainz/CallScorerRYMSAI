@@ -35,18 +35,20 @@ services:
     container_name: callscorerrymsai_backend
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "3000:3000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-callscorerrymsai_db}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
       JWT_ACCESS_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN: 7d
-      PORT: 3001
+      PORT: 3000
       FRONTEND_URL: http://localhost:5173
       UPLOADS_DIR: /app/secure-uploads
       REDIS_URL: redis://redis:6379
       NODE_ENV: production
+      COOKIE_SAME_SITE: lax
+      COOKIE_SECURE: "false"
     volumes:
       - uploads_data:/app/secure-uploads
     depends_on:
@@ -71,6 +73,9 @@ services:
       UPLOADS_DIR: /app/secure-uploads
       REDIS_URL: redis://redis:6379
       NODE_ENV: production
+      COOKIE_SAME_SITE: lax
+      COOKIE_SECURE: "false"
+      WORKER_CONCURRENCY: "3"
     volumes:
       - uploads_data:/app/secure-uploads
     command: ["node", "dist/worker.js"]
@@ -85,7 +90,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: http://localhost:3001
+        VITE_API_URL: ""
     container_name: callscorerrymsai_frontend
     restart: unless-stopped
     ports:

@@ -28,7 +28,7 @@ const createUserSchema = z.object({
     .trim()
     .min(3, 'Usuario muy corto')
     .max(80)
-    .regex(/^[a-zA-Z0-9._-]+$/, 'Usuario invalido'),
+    .regex(/^[a-zA-Z0-9._ -]+$/, 'Usuario invalido'),
   role: roleSchema,
   isActive: z.boolean().optional(),
   password: z.string().min(8, 'La contrasena debe tener al menos 8 caracteres').optional(),
@@ -40,8 +40,9 @@ const updateUserSchema = z.object({
     .trim()
     .min(3, 'Usuario muy corto')
     .max(80)
-    .regex(/^[a-zA-Z0-9._-]+$/, 'Usuario invalido')
+    .regex(/^[a-zA-Z0-9._ -]+$/, 'Usuario invalido')
     .optional(),
+  name: z.string().trim().min(2).max(120).optional(),
   role: roleSchema.optional(),
   isActive: z.boolean().optional(),
   password: z.string().min(8, 'La contrasena debe tener al menos 8 caracteres').optional(),
@@ -191,6 +192,7 @@ router.patch('/users/:id', async (req: AuthRequest, res: Response) => {
   const updated = await prisma.$transaction(async (tx) => {
     const nextRole = body.role ?? existing.role;
     const nextUsername = body.username?.trim().toLowerCase();
+    const nextName = body.name?.trim() ?? (nextUsername ? usernameToGestorName(nextUsername) : undefined);
     const nextEmail = nextUsername ? `${nextUsername}@local.user` : undefined;
     let nextGestorId = existing.gestorId;
 
@@ -198,14 +200,14 @@ router.patch('/users/:id', async (req: AuthRequest, res: Response) => {
       if (!nextGestorId) {
         const gestor = await tx.gestor.create({
           data: {
-            name: usernameToGestorName(nextUsername ?? existing.username ?? existing.name),
+            name: nextName ?? usernameToGestorName(existing.username ?? existing.name),
           },
         });
         nextGestorId = gestor.id;
-      } else if (nextUsername) {
+      } else if (nextName || nextUsername) {
         await tx.gestor.update({
           where: { id: nextGestorId },
-          data: { name: usernameToGestorName(nextUsername) },
+          data: { name: nextName ?? usernameToGestorName(nextUsername ?? existing.username ?? existing.name) },
         });
       }
     } else {
@@ -215,9 +217,8 @@ router.patch('/users/:id', async (req: AuthRequest, res: Response) => {
     return tx.user.update({
       where: { id },
       data: {
-        ...(nextUsername !== undefined
-          ? { username: nextUsername, name: nextUsername, email: nextEmail }
-          : {}),
+        ...(nextUsername !== undefined ? { username: nextUsername, email: nextEmail } : {}),
+        ...(nextName !== undefined ? { name: nextName } : {}),
         ...(body.role !== undefined ? { role: body.role } : {}),
         ...(nextGestorId !== existing.gestorId ? { gestorId: nextGestorId } : {}),
         ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),

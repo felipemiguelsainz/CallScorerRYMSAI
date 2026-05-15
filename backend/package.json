@@ -24,6 +24,8 @@
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
+    "@types/adm-zip": "^0.5.8",
+    "adm-zip": "^0.5.17",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.12.12",
     "cookie-parser": "^1.4.6",

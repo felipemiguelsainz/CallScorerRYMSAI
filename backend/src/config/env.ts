@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+  PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   DATABASE_URL: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 chars'),
@@ -11,8 +11,10 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().min(1),
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
+  COOKIE_SECURE: z.enum(['true', 'false']).optional(),
   REDIS_URL: z.string().default('redis://localhost:6379'),
   UPLOADS_DIR: z.string().default('./secure-uploads'),
+  WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(5),
 });
 
 const parsed = envSchema.safeParse(process.env);
